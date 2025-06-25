@@ -1,4 +1,10 @@
 import type {Config} from 'tailwindcss';
+import {
+  animate,
+  motion,
+  useMotionTemplate,
+  useMotionValue,
+} from 'framer-motion';
 
 export default {
   darkMode: ['class'],
@@ -11,7 +17,7 @@ export default {
     extend: {
       fontFamily: {
         body: ['Inter', 'sans-serif'],
-        headline: ['Inter', 'sans-serif'],
+        headline: ['Space Grotesk', 'sans-serif'],
         code: ['monospace'],
       },
       colors: {
