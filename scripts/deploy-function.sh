@@ -1,4 +1,10 @@
 #!/bin/bash
+[ -n "$FUNCTION_NAME" ] || read -p "Function Name: " FUNCTION_NAME
+[ -n "$REGION" ] || read -p "Region: " REGION
+[ -n "$SOURCE_PATH" ] || read -p "Source Path: " SOURCE_PATH
+[ -n "$RUNTIME" ] || read -p "Runtime: " RUNTIME
+[ -n "$ENTRY_POINT" ] || read -p "Entry Point: " ENTRY_POINT
+
 echo "---STEP:Setting Project"
 gcloud config set project $GCLOUD_PROJECT
 

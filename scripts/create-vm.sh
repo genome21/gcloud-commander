@@ -1,4 +1,7 @@
 #!/bin/bash
+[ -n "$VM_NAME" ] || read -p "VM Name: " VM_NAME
+[ -n "$ZONE" ] || read -p "GCP Zone: " ZONE
+
 echo "---STEP:Setting Project"
 gcloud config set project $GCLOUD_PROJECT
 
