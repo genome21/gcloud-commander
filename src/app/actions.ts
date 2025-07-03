@@ -49,17 +49,17 @@ export async function getScripts(): Promise<Script[]> {
       try {
         const key = path.basename(file, '.json');
         const jsonPath = path.join(scriptsDir, file);
-        const scriptPath = path.join(scriptsDir, `${key}.sh`);
-
-        const jsonFileContent = await fs.readFile(jsonPath, 'utf-8');
-        const scriptFileContent = await fs.readFile(scriptPath, 'utf-8').catch(() => {
-          console.warn(`Script file not found for key: ${key}. Assuming empty content.`);
-          return '';
-        });
         
+        const jsonFileContent = await fs.readFile(jsonPath, 'utf-8');
         const data = JSON.parse(jsonFileContent);
 
-        if (typeof data.name === 'string' && typeof data.description === 'string') {
+        if (typeof data.name === 'string' && typeof data.description === 'string' && typeof data.script === 'string') {
+            const scriptPath = path.join(scriptsDir, data.script);
+            const scriptFileContent = await fs.readFile(scriptPath, 'utf-8').catch(() => {
+              console.warn(`Script file not found for key: ${key}. Assuming empty content.`);
+              return '';
+            });
+
             scripts.push({
               key: key,
               name: data.name,
@@ -92,9 +92,10 @@ export async function saveScript(
       await deleteScript(key);
   }
   
-  const scriptMetadata = { name, description };
+  const scriptFilename = `${newKey}.sh`;
+  const scriptMetadata = { name, description, script: scriptFilename };
   const jsonPath = path.join(scriptsDir, `${newKey}.json`);
-  const scriptPath = path.join(scriptsDir, `${newKey}.sh`);
+  const scriptPath = path.join(scriptsDir, scriptFilename);
 
   await fs.writeFile(jsonPath, JSON.stringify(scriptMetadata, null, 2));
   await fs.writeFile(scriptPath, content);

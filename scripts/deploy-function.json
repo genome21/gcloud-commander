@@ -1,5 +1,6 @@
 
 {
   "name": "Deploy Cloud Function",
-  "description": "Deploys a new Google Cloud Function from a local directory."
+  "description": "Deploys a new Google Cloud Function from a local directory.",
+  "script": "deploy-function.sh"
 }

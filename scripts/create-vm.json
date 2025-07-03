@@ -1,5 +1,6 @@
 
 {
   "name": "Create GCE VM",
-  "description": "Creates a new Google Compute Engine virtual machine instance."
+  "description": "Creates a new Google Compute Engine virtual machine instance.",
+  "script": "create-vm.sh"
 }

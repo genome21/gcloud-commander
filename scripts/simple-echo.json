@@ -1,5 +1,6 @@
 
 {
   "name": "Simple Echo Script",
-  "description": "A simple script that echoes a message. No inputs required."
+  "description": "A simple script that echoes a message. No inputs required.",
+  "script": "simple-echo.sh"
 }
