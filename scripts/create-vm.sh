@@ -1,4 +1,5 @@
 #!/bin/bash
+[ -n "$GCLOUD_PROJECT" ] || read -p "GCP Project ID: " GCLOUD_PROJECT
 [ -n "$VM_NAME" ] || read -p "VM Name: " VM_NAME
 [ -n "$ZONE" ] || read -p "GCP Zone: " ZONE
 

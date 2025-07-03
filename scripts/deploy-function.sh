@@ -1,4 +1,5 @@
 #!/bin/bash
+[ -n "$GCLOUD_PROJECT" ] || read -p "GCP Project ID: " GCLOUD_PROJECT
 [ -n "$FUNCTION_NAME" ] || read -p "Function Name: " FUNCTION_NAME
 [ -n "$REGION" ] || read -p "Region: " REGION
 [ -n "$SOURCE_PATH" ] || read -p "Source Path: " SOURCE_PATH
