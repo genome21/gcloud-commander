@@ -17,7 +17,6 @@ import {
 } from 'lucide-react';
 import { getSummaryForScriptLog, getScripts, saveScript, deleteScript, type Script } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
-import { MockExecutor } from '@/lib/execution';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -123,49 +122,91 @@ export default function GCloudCommander() {
     setIsExecuting(true);
     setSteps([]);
     setExpandedLogs(new Set());
-
-    const executor = new MockExecutor(selectedScript.content, inputValues);
-
-    executor.on('step', async (step) => {
-      setSteps((prevSteps) => [
-        ...prevSteps,
-        { ...step, status: 'running', summaryLoading: true },
-      ]);
-
-      try {
-        const summary = await getSummaryForScriptLog(step.log);
-        setSteps((prevSteps) =>
-          prevSteps.map((s) =>
-            s.id === step.id
-              ? { ...s, status: 'success', summary, summaryLoading: false }
-              : s
-          )
-        );
-      } catch (e) {
-        setSteps((prevSteps) =>
-          prevSteps.map((s) =>
-            s.id === step.id
-              ? { ...s, status: 'error', summary: 'Failed to get summary.', summaryLoading: false }
-              : s
-          )
-        );
+  
+    try {
+      const response = await fetch('/api/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scriptContent: selectedScript.content,
+          inputValues: inputValues,
+        }),
+      });
+  
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'An unknown error occurred during execution.' }));
+        throw new Error(errorData.message || 'Execution failed');
       }
-    });
-
-    executor.on('error', (error) => {
+  
+      if (!response.body) {
+        throw new Error('Response body is missing');
+      }
+  
+      const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+      let buffer = '';
+  
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+  
+        buffer += value;
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep the last, possibly incomplete, line
+  
+        for (const line of lines) {
+          if (line.trim() === '') continue;
+          const { type, data } = JSON.parse(line);
+  
+          if (type === 'step') {
+            const step = data;
+            setSteps((prevSteps) => [
+              ...prevSteps,
+              { ...step, status: 'running', summaryLoading: true },
+            ]);
+  
+            getSummaryForScriptLog(step.log)
+              .then(summary => {
+                setSteps((prevSteps) =>
+                  prevSteps.map((s) =>
+                    s.id === step.id
+                      ? { ...s, status: 'success', summary, summaryLoading: false }
+                      : s
+                  )
+                );
+              })
+              .catch(() => {
+                setSteps((prevSteps) =>
+                  prevSteps.map((s) =>
+                    s.id === step.id
+                      ? { ...s, status: 'error', summary: 'Failed to get summary.', summaryLoading: false }
+                      : s
+                  )
+                );
+              });
+          } else if (type === 'error') {
+            toast({
+              variant: 'destructive',
+              title: 'Execution Error',
+              description: data.message,
+            });
+            setIsExecuting(false);
+            return; // Stop processing
+          } else if (type === 'end') {
+            setIsExecuting(false);
+            return; // Stop processing
+          }
+        }
+      }
+      setIsExecuting(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'An unknown network error occurred';
       toast({
         variant: 'destructive',
-        title: 'Execution Error',
-        description: error.message,
+        title: 'Error',
+        description: message,
       });
       setIsExecuting(false);
-    });
-
-    executor.on('end', () => {
-      setIsExecuting(false);
-    });
-
-    executor.run();
+    }
   };
 
   const onScriptsChanged = (newKey?: string) => {
@@ -395,7 +436,7 @@ function ScriptManagerDialog({ open, onOpenChange, onScriptsChanged }: { open: b
     }, [open, editingScript, toast]);
 
     const handleAddNew = () => {
-        setEditingScript({ key: '', name: '', description: '', content: '#!/bin/bash\\n\\necho "New script"' });
+        setEditingScript({ key: '', name: '', description: '', content: '#!/bin/bash\\n\\necho "---STEP:New Script"\\necho "Hello World!"' });
     };
 
     const handleEdit = (script: Script) => {

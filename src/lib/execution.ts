@@ -1,3 +1,5 @@
+import { spawn } from 'child_process';
+
 type Step = {
   id: number;
   title: string;
@@ -24,7 +26,7 @@ class EventEmitter {
   }
 }
 
-export class MockExecutor extends EventEmitter {
+export class Executor extends EventEmitter {
   private scriptContent: string;
   private inputValues: Record<string, string>;
 
@@ -34,48 +36,57 @@ export class MockExecutor extends EventEmitter {
     this.inputValues = inputValues;
   }
 
-  async run() {
-    const steps: Omit<Step, 'id'>[] = [];
+  run() {
+    const env = { ...process.env, ...this.inputValues };
+    const child = spawn('bash', ['-c', this.scriptContent], { env });
 
-    if (this.scriptContent.includes('gcloud compute instances create')) {
-      const projectName = this.inputValues['GCLOUD_PROJECT'] || 'test-project';
-      const vmName = this.inputValues['VM_NAME'] || 'test-vm';
-      const zone = this.inputValues['ZONE'] || 'us-central1-a';
-      
-      steps.push({ title: 'Setting Project', log: `Updated property [core/project] to [${projectName}].` });
-      steps.push({ title: 'Creating VM Instance', log: `Creating instance [${vmName}] in [${zone}]...done.\nMachine type: e2-medium\nImage project: debian-cloud\nImage family: debian-11\nCreated [https://www.googleapis.com/compute/v1/projects/${projectName}/zones/${zone}/instances/${vmName}].` });
-      steps.push({ title: 'Verifying Status', log: `NAME: ${vmName} ZONE: ${zone} MACHINE_TYPE: e2-medium PREEMPTIBLE: false INTERNAL_IP: 10.128.0.1 EXTERNAL_IP: 34.67.123.45 STATUS: RUNNING` });
+    let stepIdCounter = 0;
+    let currentStep = {
+      id: stepIdCounter,
+      title: 'Initializing Execution...',
+      log: '',
+    };
 
-    } else if (this.scriptContent.includes('gcloud storage ls')) {
-       const projectName = this.inputValues['GCLOUD_PROJECT'] || 'test-project';
-       steps.push({ title: 'Setting Project', log: `Updated property [core/project] to [${projectName}].` });
-       steps.push({ title: 'Listing Buckets', log: `Listing all buckets in project ${projectName}:\ngs://test-project-alpha-bucket/\ngs://test-project-media-assets/\ngs://test-project-backup-storage/`});
+    const emitCurrentStep = () => {
+      if (currentStep.log.trim() || currentStep.title !== 'Next Step...') {
+        this.emit('step', { ...currentStep, log: currentStep.log.trim() });
+        stepIdCounter++;
+        currentStep = {
+          id: stepIdCounter,
+          title: 'Next Step...',
+          log: '',
+        };
+      }
+    };
+
+    const processData = (data: Buffer) => {
+      const output = data.toString();
+      const lines = output.split('\n');
+
+      for (const line of lines) {
+         if (!line) continue;
+        if (line.startsWith('---STEP:')) {
+          emitCurrentStep();
+          currentStep.title = line.replace('---STEP:', '').trim();
+        } else {
+          currentStep.log += line + '\n';
+        }
+      }
+    };
     
-    } else if (this.scriptContent.includes('gcloud functions deploy')) {
-      const projectName = this.inputValues['GCLOUD_PROJECT'] || 'test-project';
-      const functionName = this.inputValues['FUNCTION_NAME'] || 'my-test-function';
-      const region = this.inputValues['REGION'] || 'us-central1';
-      
-      steps.push({ title: 'Setting Project', log: `Updated property [core/project] to [${projectName}].` });
-      steps.push({ title: 'Deploying Function', log: `Deploying function [${functionName}] in project [${projectName}] region [${region}]...done.` });
-      steps.push({ title: 'Verifying Deployment', log: `https:/\/${region}-${projectName}.cloudfunctions.net/${functionName}` });
+    child.stdout.on('data', processData);
+    child.stderr.on('data', processData);
 
-    } else if (this.scriptContent.includes('This is a test message.')) {
-      steps.push({ title: 'Running Script', log: `This is a simple test script.\nIt doesn't require any user input.`});
-      steps.push({ title: 'Displaying Test Message', log: 'This is a test message.'});
-      steps.push({ title: 'Finishing up', log: 'Script finished.'});
-    } else {
-      // Fallback for any other script
-      steps.push({ title: 'Running Script', log: this.scriptContent });
-      steps.push({ title: 'Finishing up', log: 'Script finished.'});
-    }
+    child.on('error', (error) => {
+      this.emit('error', error);
+    });
 
-    for (let i = 0; i < steps.length; i++) {
-      await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000));
-      this.emit('step', { id: i, ...steps[i] });
-    }
-
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    this.emit('end');
+    child.on('close', (code) => {
+      emitCurrentStep();
+      if (code !== 0) {
+        this.emit('error', new Error(`Script exited with code ${code}.`));
+      }
+      this.emit('end');
+    });
   }
 }

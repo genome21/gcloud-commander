@@ -1,10 +1,6 @@
 #!/bin/bash
-echo "Listing all GCS buckets..."
-read -p "Enter your Google Cloud Project ID: " GCLOUD_PROJECT
-
-echo "Setting project to $GCLOUD_PROJECT..."
+echo "---STEP:Setting Project"
 gcloud config set project $GCLOUD_PROJECT
 
+echo "---STEP:Listing Buckets"
 gcloud storage ls
-
-echo "Finished listing buckets."
