@@ -1,0 +1,4 @@
+{
+  "name": "List GCS Buckets",
+  "description": "Lists all Google Cloud Storage buckets in a project."
+}

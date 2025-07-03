@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   CheckCircle2,
   ChevronDown,
@@ -9,31 +9,25 @@ import {
   Sparkles,
   TerminalSquare,
   XCircle,
+  Settings,
+  PlusCircle,
+  Trash2,
+  Pencil,
 } from 'lucide-react';
-import { getSummaryForScriptLog } from '@/app/actions';
+import { getSummaryForScriptLog, getScripts, getScriptContent, saveScript, deleteScript, type ScriptMetadata } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { MockExecutor } from '@/lib/execution';
-import { SCRIPTS, type Script } from '@/lib/scripts';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { AnimatePresence, motion } from 'framer-motion';
 
 interface Variable {
@@ -50,7 +44,12 @@ interface ExecutionStep {
   summaryLoading: boolean;
 }
 
+interface Script extends ScriptMetadata {
+    content: string;
+}
+
 const parseVariables = (scriptContent: string): Variable[] => {
+  if (!scriptContent) return [];
   const variableRegex = /read -p "([^"]+): " ([A-Z_0-9]+)/g;
   const matches = [...scriptContent.matchAll(variableRegex)];
   return matches.map((match) => ({
@@ -61,35 +60,63 @@ const parseVariables = (scriptContent: string): Variable[] => {
 
 export default function GCloudCommander() {
   const { toast } = useToast();
-  const [scripts, setScripts] = useState<Record<string, Script>>({});
+  const [scripts, setScripts] = useState<ScriptMetadata[]>([]);
   const [selectedScriptKey, setSelectedScriptKey] = useState<string>('');
+  const [selectedScriptContent, setSelectedScriptContent] = useState<string>('');
+  const [isLoadingContent, setIsLoadingContent] = useState(false);
   const [variables, setVariables] = useState<Variable[]>([]);
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
   const [steps, setSteps] = useState<ExecutionStep[]>([]);
   const [isExecuting, setIsExecuting] = useState(false);
+  const [isManaging, setIsManaging] = useState(false);
+
+  const fetchScripts = useCallback(async () => {
+    try {
+      const fetchedScripts = await getScripts();
+      setScripts(fetchedScripts);
+      if (fetchedScripts.length > 0 && !selectedScriptKey) {
+        setSelectedScriptKey(fetchedScripts[0].key);
+      } else if (fetchedScripts.length === 0) {
+        setSelectedScriptKey('');
+        setSelectedScriptContent('');
+      }
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Failed to load scripts.' });
+    }
+  }, [toast, selectedScriptKey]);
 
   useEffect(() => {
-    setScripts(SCRIPTS);
-    const firstScriptKey = Object.keys(SCRIPTS)[0];
-    if (firstScriptKey) {
-      handleScriptChange(firstScriptKey);
-    }
-  }, []);
+    fetchScripts();
+  }, [fetchScripts]);
+  
+  useEffect(() => {
+      if (selectedScriptKey) {
+          setIsLoadingContent(true);
+          getScriptContent(selectedScriptKey)
+              .then(content => {
+                  setSelectedScriptContent(content);
+                  const parsedVars = parseVariables(content);
+                  setVariables(parsedVars);
+                  setInputValues({});
+                  setSteps([]);
+              })
+              .catch(() => {
+                  toast({ variant: 'destructive', title: 'Error', description: 'Could not load script content.' });
+                  setSelectedScriptContent('');
+                  setVariables([]);
+              })
+              .finally(() => setIsLoadingContent(false));
+      } else {
+          setSelectedScriptContent('');
+          setVariables([]);
+          setSteps([]);
+      }
+  }, [selectedScriptKey, toast]);
 
-  const selectedScript = useMemo(() => {
-    return scripts[selectedScriptKey];
-  }, [scripts, selectedScriptKey]);
 
   const handleScriptChange = (key: string) => {
     if (isExecuting) return;
     setSelectedScriptKey(key);
-    const script = scripts[key];
-    if (script) {
-      const parsedVars = parseVariables(script.content);
-      setVariables(parsedVars);
-      setInputValues({});
-      setSteps([]);
-    }
   };
 
   const handleInputChange = (name: string, value: string) => {
@@ -97,11 +124,11 @@ export default function GCloudCommander() {
   };
 
   const handleExecute = async () => {
-    if (!selectedScript) return;
+    if (!selectedScriptContent) return;
     setIsExecuting(true);
     setSteps([]);
 
-    const executor = new MockExecutor(selectedScript.content, inputValues);
+    const executor = new MockExecutor(selectedScriptContent, inputValues);
 
     executor.on('step', async (step) => {
       setSteps((prevSteps) => [
@@ -145,6 +172,19 @@ export default function GCloudCommander() {
     executor.run();
   };
 
+  const onScriptsChanged = (newKey?: string) => {
+      fetchScripts().then(() => {
+          if (newKey) {
+              setSelectedScriptKey(newKey);
+          }
+      });
+  }
+
+  const selectedScript = useMemo(() => {
+    return scripts.find(s => s.key === selectedScriptKey);
+  }, [scripts, selectedScriptKey]);
+
+
   const StatusIcon = ({ status }: { status: ExecutionStep['status'] }) => {
     const iconMap = {
       running: <Loader2 className="h-5 w-5 animate-spin text-accent" />,
@@ -160,46 +200,63 @@ export default function GCloudCommander() {
   };
 
   return (
+    <>
     <Card className="w-full max-w-4xl shadow-2xl shadow-primary/10">
       <CardHeader>
-        <div className="flex items-center gap-3">
-          <TerminalSquare className="h-8 w-8 text-primary" />
-          <div>
-            <CardTitle className="font-headline text-2xl tracking-wider">
-              GCloud Commander
-            </CardTitle>
-            <CardDescription>
-              A professional frontend for your gcloud scripts.
-            </CardDescription>
-          </div>
+        <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+                <TerminalSquare className="h-8 w-8 text-primary" />
+                <div>
+                    <CardTitle className="font-headline text-2xl tracking-wider">
+                    GCloud Commander
+                    </CardTitle>
+                    <CardDescription>
+                    A professional frontend for your gcloud scripts.
+                    </CardDescription>
+                </div>
+            </div>
+            <Button variant="ghost" size="icon" onClick={() => setIsManaging(true)}>
+                <Settings className="h-5 w-5" />
+            </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="space-y-2">
-          <Label htmlFor="script-select">Select a script to run</Label>
-          <Select
-            value={selectedScriptKey}
-            onValueChange={handleScriptChange}
-            disabled={isExecuting}
-            name="script-select"
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Choose a script..." />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(scripts).map(([key, script]) => (
-                <SelectItem key={key} value={key}>
-                  {script.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {selectedScript && (
-            <p className="text-sm text-muted-foreground pt-1">{selectedScript.description}</p>
-          )}
-        </div>
+        {scripts.length > 0 ? (
+            <div className="space-y-2">
+            <Label htmlFor="script-select">Select a script to run</Label>
+            <Select
+                value={selectedScriptKey}
+                onValueChange={handleScriptChange}
+                disabled={isExecuting}
+                name="script-select"
+            >
+                <SelectTrigger className="w-full">
+                <SelectValue placeholder="Choose a script..." />
+                </SelectTrigger>
+                <SelectContent>
+                {scripts.map((script) => (
+                    <SelectItem key={script.key} value={script.key}>
+                    {script.name}
+                    </SelectItem>
+                ))}
+                </SelectContent>
+            </Select>
+            {selectedScript && (
+                <p className="text-sm text-muted-foreground pt-1">{selectedScript.description}</p>
+            )}
+            </div>
+        ) : (
+            <div className="text-center text-sm text-muted-foreground p-4 bg-muted/50 rounded-md">
+                No scripts found. Click the settings icon to add a new script.
+            </div>
+        )}
 
-        {variables.length > 0 && (
+        {isLoadingContent ? (
+            <div className="space-y-4">
+                <Skeleton className="h-6 w-1/4" />
+                <Skeleton className="h-10 w-full" />
+            </div>
+        ) : variables.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {variables.map((variable) => (
               <div key={variable.name} className="space-y-2">
@@ -214,9 +271,7 @@ export default function GCloudCommander() {
               </div>
             ))}
           </div>
-        )}
-        
-        {selectedScript && variables.length === 0 && (
+        ) : selectedScriptKey && (
             <div className="text-center text-sm text-muted-foreground p-4 bg-muted/50 rounded-md">
                 This script does not require any inputs.
             </div>
@@ -226,7 +281,7 @@ export default function GCloudCommander() {
       <CardFooter className="flex-col items-stretch gap-6">
         <Button
           onClick={handleExecute}
-          disabled={isExecuting}
+          disabled={isExecuting || !selectedScriptKey || isLoadingContent}
           className="w-full font-bold text-lg py-6"
         >
           {isExecuting ? (
@@ -280,5 +335,149 @@ export default function GCloudCommander() {
         )}
       </CardFooter>
     </Card>
+    <ScriptManagerDialog open={isManaging} onOpenChange={setIsManaging} onScriptsChanged={onScriptsChanged} />
+    </>
   );
+}
+
+
+function ScriptManagerDialog({ open, onOpenChange, onScriptsChanged }: { open: boolean, onOpenChange: (open: boolean) => void, onScriptsChanged: (newKey?: string) => void}) {
+    const { toast } = useToast();
+    const [scripts, setScripts] = useState<ScriptMetadata[]>([]);
+    const [editingScript, setEditingScript] = useState<Partial<Script> | null>(null);
+    
+    useEffect(() => {
+        if (open) {
+            getScripts().then(setScripts).catch(() => {
+                toast({ variant: 'destructive', title: 'Error', description: 'Failed to load scripts.' });
+            });
+        }
+    }, [open, toast]);
+
+    const handleAddNew = () => {
+        setEditingScript({ key: '', name: '', description: '', content: '#!/bin/bash\n\necho "New script"' });
+    };
+
+    const handleEdit = async (script: ScriptMetadata) => {
+        try {
+            const content = await getScriptContent(script.key);
+            setEditingScript({ ...script, content });
+        } catch {
+            toast({ variant: 'destructive', title: 'Error', description: 'Failed to load script content for editing.' });
+        }
+    };
+
+    const handleDelete = async (key: string) => {
+        try {
+            await deleteScript(key);
+            toast({ title: 'Success', description: 'Script deleted.' });
+            const newScripts = scripts.filter(s => s.key !== key);
+            setScripts(newScripts);
+            onScriptsChanged();
+        } catch {
+            toast({ variant: 'destructive', title: 'Error', description: 'Failed to delete script.' });
+        }
+    };
+
+    const handleSave = async () => {
+        if (!editingScript || !editingScript.name) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Script name is required.' });
+            return;
+        }
+
+        try {
+            const savedScript = await saveScript(editingScript.key || null, editingScript.name, editingScript.description || '', editingScript.content || '');
+            toast({ title: 'Success', description: `Script "${savedScript.name}" saved.` });
+            setEditingScript(null);
+            onScriptsChanged(savedScript.key);
+            getScripts().then(setScripts);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'An unknown error occurred.';
+            toast({ variant: 'destructive', title: 'Error', description: `Failed to save script: ${message}` });
+        }
+    };
+
+    if (editingScript) {
+        return (
+            <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) setEditingScript(null); onOpenChange(isOpen); }}>
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>{editingScript.key ? 'Edit Script' : 'Add New Script'}</DialogTitle>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="name" className="text-right">Name</Label>
+                            <Input id="name" value={editingScript.name} onChange={e => setEditingScript(s => s ? {...s, name: e.target.value} : null)} className="col-span-3" />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="description" className="text-right">Description</Label>
+                            <Input id="description" value={editingScript.description} onChange={e => setEditingScript(s => s ? {...s, description: e.target.value} : null)} className="col-span-3" />
+                        </div>
+                        <div className="grid grid-cols-4 items-start gap-4">
+                            <Label htmlFor="content" className="text-right pt-2">Script</Label>
+                            <Textarea id="content" value={editingScript.content} onChange={e => setEditingScript(s => s ? {...s, content: e.target.value} : null)} className="col-span-3 min-h-[250px] font-mono" placeholder='#!/bin/bash ...' />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setEditingScript(null)}>Cancel</Button>
+                        <Button onClick={handleSave}>Save Script</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        )
+    }
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-xl">
+                <DialogHeader>
+                    <DialogTitle>Manage Scripts</DialogTitle>
+                </DialogHeader>
+                <div className="py-4">
+                    <div className="flex justify-end mb-4">
+                        <Button onClick={handleAddNew}><PlusCircle className="mr-2 h-4 w-4" /> Add New Script</Button>
+                    </div>
+                    <ScrollArea className="h-[400px] border rounded-md">
+                        <div className="p-4 space-y-2">
+                           {scripts.length > 0 ? scripts.map(script => (
+                                <div key={script.key} className="flex items-center justify-between p-2 rounded-md hover:bg-muted">
+                                    <div>
+                                        <p className="font-medium">{script.name}</p>
+                                        <p className="text-sm text-muted-foreground">{script.description}</p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Button variant="ghost" size="icon" onClick={() => handleEdit(script)}><Pencil className="h-4 w-4" /></Button>
+
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                                    <AlertDialogDescription>This will permanently delete the "{script.name}" script. This action cannot be undone.</AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                    <AlertDialogAction onClick={() => handleDelete(script.key)}>Delete</AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+
+                                    </div>
+                                </div>
+                            )) : (
+                                <div className="text-center text-muted-foreground py-16">No scripts yet.</div>
+                            )}
+                        </div>
+                    </ScrollArea>
+                </div>
+                 <DialogFooter>
+                    <DialogClose asChild>
+                        <Button variant="outline">Close</Button>
+                    </DialogClose>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
 }
