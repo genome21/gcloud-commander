@@ -60,8 +60,13 @@ export class MockExecutor extends EventEmitter {
       steps.push({ title: 'Deploying Function', log: `Deploying function [${functionName}] in project [${projectName}] region [${region}]...done.` });
       steps.push({ title: 'Verifying Deployment', log: `https:/\/${region}-${projectName}.cloudfunctions.net/${functionName}` });
 
-    } else {
+    } else if (this.scriptContent.includes('This is a test message.')) {
       steps.push({ title: 'Running Script', log: `This is a simple test script.\nIt doesn't require any user input.`});
+      steps.push({ title: 'Displaying Test Message', log: 'This is a test message.'});
+      steps.push({ title: 'Finishing up', log: 'Script finished.'});
+    } else {
+      // Fallback for any other script
+      steps.push({ title: 'Running Script', log: this.scriptContent });
       steps.push({ title: 'Finishing up', log: 'Script finished.'});
     }
 
