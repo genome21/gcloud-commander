@@ -1,3 +1,5 @@
+'use server';
+
 import { spawn } from 'child_process';
 
 type Step = {
