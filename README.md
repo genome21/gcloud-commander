@@ -55,7 +55,7 @@ This script will be displayed in the UI as three distinct steps: "Setting Projec
 
 ### Defining Input Variables
 
-To prompt the user for input variables, use the `read -p` command with a specific syntax. The application parses these lines to generate input fields in the UI.
+To prompt the user for input variables, use the `read -p` command. The application parses these lines to automatically generate input fields in the UI.
 
 The format is:
 
@@ -66,19 +66,19 @@ read -p "Prompt for User: " VARIABLE_NAME
 - `"Prompt for User: "` is the label that will be displayed next to the input field in the UI.
 - `VARIABLE_NAME` is the name of the environment variable that will be set with the user's input when the script is executed.
 
-**Important:** While you use `read -p` to *declare* the variable for the UI, the script runner will inject the value as an environment variable. The `read` command itself won't pause for user input in the terminal when run through the app. You can still run the script from a standard terminal, and it will prompt for input as expected.
+**Important:** The `read -p` lines are used to declare which variables the script needs. When the script is executed through the app, these lines are ignored, and the values from the UI are injected directly as environment variables.
 
 **Example:**
 
 ```sh
 #!/bin/bash
-[ -n "$GCLOUD_PROJECT" ] || read -p "GCP Project ID: " GCLOUD_PROJECT
-[ -n "$VM_NAME" ] || read -p "VM Name: " VM_NAME
-[ -n "$ZONE" ] || read -p "GCP Zone: " ZONE
+read -p "GCP Project ID: " GCLOUD_PROJECT
+read -p "VM Name: " VM_NAME
+read -p "GCP Zone: " ZONE
 
 echo "---STEP:Creating VM"
 echo "Creating VM $VM_NAME in project $GCLOUD_PROJECT and zone $ZONE..."
 # Your gcloud command here
 ```
 
-In the UI, this will generate three input fields with the labels "GCP Project ID:", "VM Name:", and "GCP Zone:". The values entered by the user will be available as `$GCLOUD_PROJECT`, `$VM_NAME`, and `$ZONE` within the script. The `[ -n "$VAR" ] ||` part is a good practice to make the script runnable both in the UI (where the variable will be set) and in a standard shell (where it will prompt if the variable is not set).
+In the UI, this will generate three input fields with the labels "GCP Project ID:", "VM Name:", and "GCP Zone:". The values entered by the user will be available as `$GCLOUD_PROJECT`, `$VM_NAME`, and `$ZONE` within the script.

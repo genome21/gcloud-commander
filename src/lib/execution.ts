@@ -38,7 +38,15 @@ export class Executor extends EventEmitter {
 
   run() {
     const env = { ...process.env, ...this.inputValues };
-    const child = spawn('bash', ['-c', this.scriptContent], { env });
+    
+    // Remove the read -p lines so they are not executed by bash, as they
+    // are only for parsing variables in the UI.
+    const executableScript = this.scriptContent
+      .split('\n')
+      .filter(line => !line.trim().startsWith('read -p'))
+      .join('\n');
+
+    const child = spawn('bash', ['-c', executableScript], { env });
 
     let stepIdCounter = 0;
     let currentStep = {
