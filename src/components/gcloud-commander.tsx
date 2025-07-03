@@ -1,9 +1,9 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   CheckCircle2,
-  ChevronDown,
   Loader2,
   PlayCircle,
   Sparkles,
@@ -14,7 +14,7 @@ import {
   Trash2,
   Pencil,
 } from 'lucide-react';
-import { getSummaryForScriptLog, getScripts, getScriptContent, saveScript, deleteScript, type ScriptMetadata } from '@/app/actions';
+import { getSummaryForScriptLog, getScripts, saveScript, deleteScript, type Script } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { MockExecutor } from '@/lib/execution';
 import { Button } from '@/components/ui/button';
@@ -44,10 +44,6 @@ interface ExecutionStep {
   summaryLoading: boolean;
 }
 
-interface Script extends ScriptMetadata {
-    content: string;
-}
-
 const parseVariables = (scriptContent: string): Variable[] => {
   if (!scriptContent) return [];
   const variableRegex = /read -p "([^"]+): " ([A-Z_0-9]+)/g;
@@ -60,58 +56,53 @@ const parseVariables = (scriptContent: string): Variable[] => {
 
 export default function GCloudCommander() {
   const { toast } = useToast();
-  const [scripts, setScripts] = useState<ScriptMetadata[]>([]);
+  const [scripts, setScripts] = useState<Script[]>([]);
   const [selectedScriptKey, setSelectedScriptKey] = useState<string>('');
-  const [selectedScriptContent, setSelectedScriptContent] = useState<string>('');
-  const [isLoadingContent, setIsLoadingContent] = useState(false);
+  const [isLoadingScripts, setIsLoadingScripts] = useState(true);
   const [variables, setVariables] = useState<Variable[]>([]);
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
   const [steps, setSteps] = useState<ExecutionStep[]>([]);
   const [isExecuting, setIsExecuting] = useState(false);
   const [isManaging, setIsManaging] = useState(false);
 
+  const selectedScript = useMemo(() => {
+    return scripts.find(s => s.key === selectedScriptKey);
+  }, [scripts, selectedScriptKey]);
+
+
   const fetchScripts = useCallback(async () => {
+    setIsLoadingScripts(true);
     try {
       const fetchedScripts = await getScripts();
       setScripts(fetchedScripts);
-      if (fetchedScripts.length > 0 && !selectedScriptKey) {
+      if (fetchedScripts.length > 0 && !scripts.some(s => s.key === selectedScriptKey)) {
         setSelectedScriptKey(fetchedScripts[0].key);
       } else if (fetchedScripts.length === 0) {
         setSelectedScriptKey('');
-        setSelectedScriptContent('');
       }
     } catch (error) {
       toast({ variant: 'destructive', title: 'Error', description: 'Failed to load scripts.' });
+    } finally {
+        setIsLoadingScripts(false);
     }
-  }, [toast, selectedScriptKey]);
+  }, [toast, selectedScriptKey, scripts]);
 
   useEffect(() => {
     fetchScripts();
-  }, [fetchScripts]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   
   useEffect(() => {
-      if (selectedScriptKey) {
-          setIsLoadingContent(true);
-          getScriptContent(selectedScriptKey)
-              .then(content => {
-                  setSelectedScriptContent(content);
-                  const parsedVars = parseVariables(content);
-                  setVariables(parsedVars);
-                  setInputValues({});
-                  setSteps([]);
-              })
-              .catch(() => {
-                  toast({ variant: 'destructive', title: 'Error', description: 'Could not load script content.' });
-                  setSelectedScriptContent('');
-                  setVariables([]);
-              })
-              .finally(() => setIsLoadingContent(false));
+      if (selectedScript) {
+        const parsedVars = parseVariables(selectedScript.content);
+        setVariables(parsedVars);
+        setInputValues({});
+        setSteps([]);
       } else {
-          setSelectedScriptContent('');
-          setVariables([]);
-          setSteps([]);
+        setVariables([]);
+        setSteps([]);
       }
-  }, [selectedScriptKey, toast]);
+  }, [selectedScript]);
 
 
   const handleScriptChange = (key: string) => {
@@ -124,11 +115,11 @@ export default function GCloudCommander() {
   };
 
   const handleExecute = async () => {
-    if (!selectedScriptContent) return;
+    if (!selectedScript?.content) return;
     setIsExecuting(true);
     setSteps([]);
 
-    const executor = new MockExecutor(selectedScriptContent, inputValues);
+    const executor = new MockExecutor(selectedScript.content, inputValues);
 
     executor.on('step', async (step) => {
       setSteps((prevSteps) => [
@@ -173,17 +164,20 @@ export default function GCloudCommander() {
   };
 
   const onScriptsChanged = (newKey?: string) => {
-      fetchScripts().then(() => {
+      setIsLoadingScripts(true);
+      getScripts().then((newScripts) => {
+          setScripts(newScripts);
           if (newKey) {
               setSelectedScriptKey(newKey);
+          } else if (selectedScriptKey && !newScripts.some(s => s.key === selectedScriptKey)) {
+              setSelectedScriptKey(newScripts[0]?.key || '');
           }
+      }).catch(() => {
+          toast({ variant: 'destructive', title: 'Error', description: 'Failed to reload scripts.' });
+      }).finally(() => {
+          setIsLoadingScripts(false);
       });
   }
-
-  const selectedScript = useMemo(() => {
-    return scripts.find(s => s.key === selectedScriptKey);
-  }, [scripts, selectedScriptKey]);
-
 
   const StatusIcon = ({ status }: { status: ExecutionStep['status'] }) => {
     const iconMap = {
@@ -221,7 +215,12 @@ export default function GCloudCommander() {
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        {scripts.length > 0 ? (
+        {isLoadingScripts ? (
+            <div className="space-y-4 pt-2">
+                <Skeleton className="h-6 w-1/3" />
+                <Skeleton className="h-10 w-full" />
+            </div>
+        ) : scripts.length > 0 ? (
             <div className="space-y-2">
             <Label htmlFor="script-select">Select a script to run</Label>
             <Select
@@ -251,12 +250,7 @@ export default function GCloudCommander() {
             </div>
         )}
 
-        {isLoadingContent ? (
-            <div className="space-y-4">
-                <Skeleton className="h-6 w-1/4" />
-                <Skeleton className="h-10 w-full" />
-            </div>
-        ) : variables.length > 0 ? (
+        {selectedScript && (variables.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {variables.map((variable) => (
               <div key={variable.name} className="space-y-2">
@@ -271,17 +265,16 @@ export default function GCloudCommander() {
               </div>
             ))}
           </div>
-        ) : selectedScriptKey && (
+        ) : selectedScriptKey && !isLoadingScripts && (
             <div className="text-center text-sm text-muted-foreground p-4 bg-muted/50 rounded-md">
                 This script does not require any inputs.
             </div>
-        )}
-
+        ))}
       </CardContent>
       <CardFooter className="flex-col items-stretch gap-6">
         <Button
           onClick={handleExecute}
-          disabled={isExecuting || !selectedScriptKey || isLoadingContent}
+          disabled={isExecuting || !selectedScriptKey || isLoadingScripts}
           className="w-full font-bold text-lg py-6"
         >
           {isExecuting ? (
@@ -343,28 +336,23 @@ export default function GCloudCommander() {
 
 function ScriptManagerDialog({ open, onOpenChange, onScriptsChanged }: { open: boolean, onOpenChange: (open: boolean) => void, onScriptsChanged: (newKey?: string) => void}) {
     const { toast } = useToast();
-    const [scripts, setScripts] = useState<ScriptMetadata[]>([]);
+    const [scripts, setScripts] = useState<Script[]>([]);
     const [editingScript, setEditingScript] = useState<Partial<Script> | null>(null);
     
     useEffect(() => {
-        if (open) {
+        if (open && !editingScript) {
             getScripts().then(setScripts).catch(() => {
                 toast({ variant: 'destructive', title: 'Error', description: 'Failed to load scripts.' });
             });
         }
-    }, [open, toast]);
+    }, [open, editingScript, toast]);
 
     const handleAddNew = () => {
-        setEditingScript({ key: '', name: '', description: '', content: '#!/bin/bash\n\necho "New script"' });
+        setEditingScript({ key: '', name: '', description: '', content: '#!/bin/bash\\n\\necho "New script"' });
     };
 
-    const handleEdit = async (script: ScriptMetadata) => {
-        try {
-            const content = await getScriptContent(script.key);
-            setEditingScript({ ...script, content });
-        } catch {
-            toast({ variant: 'destructive', title: 'Error', description: 'Failed to load script content for editing.' });
-        }
+    const handleEdit = (script: Script) => {
+        setEditingScript(script);
     };
 
     const handleDelete = async (key: string) => {
@@ -390,7 +378,6 @@ function ScriptManagerDialog({ open, onOpenChange, onScriptsChanged }: { open: b
             toast({ title: 'Success', description: `Script "${savedScript.name}" saved.` });
             setEditingScript(null);
             onScriptsChanged(savedScript.key);
-            getScripts().then(setScripts);
         } catch (error) {
             const message = error instanceof Error ? error.message : 'An unknown error occurred.';
             toast({ variant: 'destructive', title: 'Error', description: `Failed to save script: ${message}` });
@@ -399,7 +386,7 @@ function ScriptManagerDialog({ open, onOpenChange, onScriptsChanged }: { open: b
 
     if (editingScript) {
         return (
-            <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) setEditingScript(null); onOpenChange(isOpen); }}>
+            <Dialog open={!!editingScript} onOpenChange={(isOpen) => { if (!isOpen) setEditingScript(null); }}>
                 <DialogContent className="max-w-2xl">
                     <DialogHeader>
                         <DialogTitle>{editingScript.key ? 'Edit Script' : 'Add New Script'}</DialogTitle>

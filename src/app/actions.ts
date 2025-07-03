@@ -1,13 +1,21 @@
+
 'use server';
 
 import { summarizeScriptExecution } from '@/ai/flows/summarize-script-execution';
 import fs from 'fs/promises';
 import path from 'path';
 
-export interface ScriptMetadata {
+export interface Script {
   key: string;
   name: string;
   description: string;
+  content: string;
+}
+
+export interface ScriptMetadata {
+    key: string;
+    name: string;
+    description: string;
 }
 
 const scriptsDir = path.join(process.cwd(), 'scripts');
@@ -31,38 +39,32 @@ function slugify(text: string): string {
         .replace(/-+$/, '');
 }
 
-export async function getScripts(): Promise<ScriptMetadata[]> {
+export async function getScripts(): Promise<Script[]> {
   await ensureScriptsDirExists();
   const files = await fs.readdir(scriptsDir);
-  const scriptMetadata: ScriptMetadata[] = [];
+  const scripts: Script[] = [];
 
   for (const file of files) {
     if (path.extname(file) === '.json') {
       try {
         const key = path.basename(file, '.json');
-        const content = await fs.readFile(path.join(scriptsDir, file), 'utf-8');
-        const data = JSON.parse(content);
-        scriptMetadata.push({
-          key: key,
-          name: data.name,
-          description: data.description,
-        });
+        const fileContent = await fs.readFile(path.join(scriptsDir, file), 'utf-8');
+        const data = JSON.parse(fileContent);
+
+        if (typeof data.name === 'string' && typeof data.description === 'string' && typeof data.script === 'string') {
+            scripts.push({
+              key: key,
+              name: data.name,
+              description: data.description,
+              content: data.script,
+            });
+        }
       } catch (error) {
-        console.error(`Error processing script metadata for ${file}:`, error);
+        console.error(`Error processing script file ${file}:`, error);
       }
     }
   }
-  return scriptMetadata.sort((a, b) => a.name.localeCompare(b.name));
-}
-
-export async function getScriptContent(key: string): Promise<string> {
-  const scriptPath = path.join(scriptsDir, `${key}.sh`);
-  try {
-    return await fs.readFile(scriptPath, 'utf-8');
-  } catch (error) {
-    console.error(`Error reading script content for ${key}:`, error);
-    throw new Error('Script content not found.');
-  }
+  return scripts.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export async function saveScript(
@@ -77,31 +79,27 @@ export async function saveScript(
     throw new Error("Could not generate a valid key for the script.");
   }
 
-  // If it's a rename, delete the old files
+  // If it's a rename, delete the old file
   if (key && key !== newKey) {
       await deleteScript(key);
   }
   
-  const metadata = { name, description };
-  const metadataPath = path.join(scriptsDir, `${newKey}.json`);
-  const scriptPath = path.join(scriptsDir, `${newKey}.sh`);
+  const scriptData = { name, description, script: content };
+  const scriptPath = path.join(scriptsDir, `${newKey}.json`);
 
-  await fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2));
-  await fs.writeFile(scriptPath, content);
+  await fs.writeFile(scriptPath, JSON.stringify(scriptData, null, 2));
   
   return { key: newKey, name, description };
 }
 
 export async function deleteScript(key: string): Promise<void> {
-    const metadataPath = path.join(scriptsDir, `${key}.json`);
-    const scriptPath = path.join(scriptsDir, `${key}.sh`);
+    const scriptPath = path.join(scriptsDir, `${key}.json`);
     
     try {
-        await fs.unlink(metadataPath);
         await fs.unlink(scriptPath);
     } catch(error) {
         console.error(`Error deleting script ${key}:`, error);
-        // We can ignore errors if files don't exist, e.g. partial deletion
+        // We can ignore errors if files don't exist
     }
 }
 

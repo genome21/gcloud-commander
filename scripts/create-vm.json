@@ -1,4 +1,6 @@
+
 {
   "name": "Create GCE VM",
-  "description": "Creates a new Google Compute Engine virtual machine instance."
+  "description": "Creates a new Google Compute Engine virtual machine instance.",
+  "script": "#!/bin/bash\necho \"Starting VM creation process...\"\nread -p \"Enter your Google Cloud Project ID: \" GCLOUD_PROJECT\nread -p \"Enter the desired VM name: \" VM_NAME\nread -p \"Enter the zone (e.g., us-central1-c): \" ZONE\n\necho \"Setting project to $GCLOUD_PROJECT...\"\ngcloud config set project $GCLOUD_PROJECT\n\necho \"Creating VM instance '$VM_NAME' in zone '$ZONE'...\"\ngcloud compute instances create $VM_NAME --zone=$ZONE --machine-type=e2-medium --image-family=debian-11 --image-project=debian-cloud\n\necho \"VM '$VM_NAME' created successfully.\"\n"
 }

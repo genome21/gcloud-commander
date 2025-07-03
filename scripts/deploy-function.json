@@ -1,4 +1,6 @@
+
 {
   "name": "Deploy Cloud Function",
-  "description": "Deploys a new Google Cloud Function from a local directory."
+  "description": "Deploys a new Google Cloud Function from a local directory.",
+  "script": "#!/bin/bash\necho \"Starting Cloud Function deployment...\"\nread -p \"Enter your Google Cloud Project ID: \" GCLOUD_PROJECT\nread -p \"Function name: \" FUNCTION_NAME\nread -p \"Region (e.g., us-central1): \" REGION\nread -p \"Path to source code: \" SOURCE_PATH\nread -p \"Runtime (e.g., nodejs20): \" RUNTIME\nread -p \"Entry point (function to execute): \" ENTRY_POINT\n\necho \"Setting project to $GCLOUD_PROJECT...\"\ngcloud config set project $GCLOUD_PROJECT\n\necho \"Deploying function '$FUNCTION_NAME'...\"\ngcloud functions deploy $FUNCTION_NAME \\\n  --region=$REGION \\\n  --source=$SOURCE_PATH \\\n  --runtime=$RUNTIME \\\n  --trigger-http \\\n  --entry-point=$ENTRY_POINT \\\n  --allow-unauthenticated\n\necho \"Function '$FUNCTION_NAME' deployed.\"\n"
 }

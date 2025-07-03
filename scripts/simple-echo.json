@@ -1,4 +1,6 @@
+
 {
   "name": "Simple Echo Script",
-  "description": "A simple script that echoes a message. No inputs required."
+  "description": "A simple script that echoes a message. No inputs required.",
+  "script": "#!/bin/bash\necho \"This is a simple test script.\"\necho \"It doesn't require any user input.\"\nsleep 2\necho \"Script finished.\"\n"
 }

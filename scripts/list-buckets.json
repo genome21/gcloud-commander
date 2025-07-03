@@ -1,4 +1,6 @@
+
 {
   "name": "List GCS Buckets",
-  "description": "Lists all Google Cloud Storage buckets in a project."
+  "description": "Lists all Google Cloud Storage buckets in a project.",
+  "script": "#!/bin/bash\necho \"Listing all GCS buckets...\"\nread -p \"Enter your Google Cloud Project ID: \" GCLOUD_PROJECT\n\necho \"Setting project to $GCLOUD_PROJECT...\"\ngcloud config set project $GCLOUD_PROJECT\n\ngcloud storage ls\n\necho \"Finished listing buckets.\"\n"
 }
