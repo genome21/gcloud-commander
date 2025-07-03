@@ -1,5 +1,5 @@
 
-import { Executor } from '@/lib/execution';
+import { runExecutor } from '@/lib/execution';
 import { type NextRequest } from 'next/server';
 
 export const dynamic = 'force-dynamic';
@@ -14,27 +14,7 @@ export async function POST(request: NextRequest) {
 
     const stream = new ReadableStream({
       start(controller) {
-        const executor = new Executor(scriptContent, inputValues || {});
-
-        const sendData = (data: object) => {
-            controller.enqueue(new TextEncoder().encode(JSON.stringify(data) + '\n'));
-        }
-
-        executor.on('step', (step) => {
-            sendData({ type: 'step', data: step });
-        });
-
-        executor.on('error', (error) => {
-            sendData({ type: 'error', data: { message: error.message } });
-            controller.close();
-        });
-
-        executor.on('end', () => {
-            sendData({ type: 'end' });
-            controller.close();
-        });
-        
-        executor.run();
+        runExecutor(scriptContent, inputValues || {}, controller);
       },
     });
 
