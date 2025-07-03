@@ -51,6 +51,15 @@ export class MockExecutor extends EventEmitter {
        steps.push({ title: 'Setting Project', log: `Updated property [core/project] to [${projectName}].` });
        steps.push({ title: 'Listing Buckets', log: `Listing all buckets in project ${projectName}:\ngs://test-project-alpha-bucket/\ngs://test-project-media-assets/\ngs://test-project-backup-storage/`});
     
+    } else if (this.scriptContent.includes('gcloud functions deploy')) {
+      const projectName = this.inputValues['GCLOUD_PROJECT'] || 'test-project';
+      const functionName = this.inputValues['FUNCTION_NAME'] || 'my-test-function';
+      const region = this.inputValues['REGION'] || 'us-central1';
+      
+      steps.push({ title: 'Setting Project', log: `Updated property [core/project] to [${projectName}].` });
+      steps.push({ title: 'Deploying Function', log: `Deploying function [${functionName}] in project [${projectName}] region [${region}]...done.` });
+      steps.push({ title: 'Verifying Deployment', log: `https:/\/${region}-${projectName}.cloudfunctions.net/${functionName}` });
+
     } else {
       steps.push({ title: 'Running Script', log: `This is a simple test script.\nIt doesn't require any user input.`});
       steps.push({ title: 'Finishing up', log: 'Script finished.'});
