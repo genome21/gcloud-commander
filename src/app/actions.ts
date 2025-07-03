@@ -48,15 +48,23 @@ export async function getScripts(): Promise<Script[]> {
     if (path.extname(file) === '.json') {
       try {
         const key = path.basename(file, '.json');
-        const fileContent = await fs.readFile(path.join(scriptsDir, file), 'utf-8');
-        const data = JSON.parse(fileContent);
+        const jsonPath = path.join(scriptsDir, file);
+        const scriptPath = path.join(scriptsDir, `${key}.sh`);
 
-        if (typeof data.name === 'string' && typeof data.description === 'string' && typeof data.script === 'string') {
+        const jsonFileContent = await fs.readFile(jsonPath, 'utf-8');
+        const scriptFileContent = await fs.readFile(scriptPath, 'utf-8').catch(() => {
+          console.warn(`Script file not found for key: ${key}. Assuming empty content.`);
+          return '';
+        });
+        
+        const data = JSON.parse(jsonFileContent);
+
+        if (typeof data.name === 'string' && typeof data.description === 'string') {
             scripts.push({
               key: key,
               name: data.name,
               description: data.description,
-              content: data.script,
+              content: scriptFileContent,
             });
         }
       } catch (error) {
@@ -79,27 +87,38 @@ export async function saveScript(
     throw new Error("Could not generate a valid key for the script.");
   }
 
-  // If it's a rename, delete the old file
+  // If it's a rename, delete the old files
   if (key && key !== newKey) {
       await deleteScript(key);
   }
   
-  const scriptData = { name, description, script: content };
-  const scriptPath = path.join(scriptsDir, `${newKey}.json`);
+  const scriptMetadata = { name, description };
+  const jsonPath = path.join(scriptsDir, `${newKey}.json`);
+  const scriptPath = path.join(scriptsDir, `${newKey}.sh`);
 
-  await fs.writeFile(scriptPath, JSON.stringify(scriptData, null, 2));
+  await fs.writeFile(jsonPath, JSON.stringify(scriptMetadata, null, 2));
+  await fs.writeFile(scriptPath, content);
   
   return { key: newKey, name, description };
 }
 
 export async function deleteScript(key: string): Promise<void> {
-    const scriptPath = path.join(scriptsDir, `${key}.json`);
+    const jsonPath = path.join(scriptsDir, `${key}.json`);
+    const scriptPath = path.join(scriptsDir, `${key}.sh`);
     
+    try {
+        await fs.unlink(jsonPath);
+    } catch(error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+            console.error(`Error deleting script metadata ${key}:`, error);
+        }
+    }
     try {
         await fs.unlink(scriptPath);
     } catch(error) {
-        console.error(`Error deleting script ${key}:`, error);
-        // We can ignore errors if files don't exist
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+            console.error(`Error deleting script file ${key}:`, error);
+        }
     }
 }
 
