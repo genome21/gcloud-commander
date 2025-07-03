@@ -13,6 +13,7 @@ import {
   PlusCircle,
   Trash2,
   Pencil,
+  FileText,
 } from 'lucide-react';
 import { getSummaryForScriptLog, getScripts, saveScript, deleteScript, type Script } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -64,6 +65,7 @@ export default function GCloudCommander() {
   const [steps, setSteps] = useState<ExecutionStep[]>([]);
   const [isExecuting, setIsExecuting] = useState(false);
   const [isManaging, setIsManaging] = useState(false);
+  const [expandedLogs, setExpandedLogs] = useState<Set<number>>(new Set());
 
   const selectedScript = useMemo(() => {
     return scripts.find(s => s.key === selectedScriptKey);
@@ -98,9 +100,11 @@ export default function GCloudCommander() {
         setVariables(parsedVars);
         setInputValues({});
         setSteps([]);
+        setExpandedLogs(new Set());
       } else {
         setVariables([]);
         setSteps([]);
+        setExpandedLogs(new Set());
       }
   }, [selectedScript]);
 
@@ -118,6 +122,7 @@ export default function GCloudCommander() {
     if (!selectedScript?.content) return;
     setIsExecuting(true);
     setSteps([]);
+    setExpandedLogs(new Set());
 
     const executor = new MockExecutor(selectedScript.content, inputValues);
 
@@ -178,6 +183,18 @@ export default function GCloudCommander() {
           setIsLoadingScripts(false);
       });
   }
+
+  const toggleLogExpansion = useCallback((id: number) => {
+    setExpandedLogs(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  }, []);
 
   const StatusIcon = ({ status }: { status: ExecutionStep['status'] }) => {
     const iconMap = {
@@ -297,7 +314,7 @@ export default function GCloudCommander() {
                   className="flex items-start gap-4"
                 >
                   <StatusIcon status={step.status} />
-                  <div className="flex-1 space-y-2">
+                  <div className="flex-1 space-y-1">
                     <p className="font-medium font-headline">{step.title}</p>
                     {step.summaryLoading ? (
                       <div className="space-y-2 pt-1">
@@ -306,18 +323,48 @@ export default function GCloudCommander() {
                       </div>
                     ) : (
                       step.summary && (
-                        <motion.div 
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            className="mt-2 rounded-md border border-primary/20 bg-primary/5 p-3 text-sm">
-                          <div className="flex items-center gap-2 font-medium text-primary">
-                            <Sparkles className="h-4 w-4" />
-                            <span>AI Summary</span>
-                          </div>
-                          <p className="mt-1 text-foreground/80">
-                            {step.summary}
-                          </p>
-                        </motion.div>
+                        <>
+                            <motion.div 
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                className="mt-2 rounded-md border border-primary/20 bg-primary/5 p-3 text-sm">
+                              <div className="flex items-center gap-2 font-medium text-primary">
+                                <Sparkles className="h-4 w-4" />
+                                <span>AI Summary</span>
+                              </div>
+                              <p className="mt-1 text-foreground/80">
+                                {step.summary}
+                              </p>
+                            </motion.div>
+
+                            <div className="flex justify-start pt-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => toggleLogExpansion(step.id)}
+                                    className="text-muted-foreground"
+                                >
+                                    <FileText className="mr-2 h-3 w-3" />
+                                    {expandedLogs.has(step.id) ? 'Hide Raw Output' : 'View Raw Output'}
+                                </Button>
+                            </div>
+
+                            <AnimatePresence>
+                                {expandedLogs.has(step.id) && (
+                                <motion.div
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: 'auto', opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="overflow-hidden"
+                                >
+                                    <pre className="text-xs mt-2 p-4 bg-muted rounded-md whitespace-pre-wrap font-mono text-muted-foreground">
+                                    <code>{step.log}</code>
+                                    </pre>
+                                </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </>
                       )
                     )}
                   </div>
