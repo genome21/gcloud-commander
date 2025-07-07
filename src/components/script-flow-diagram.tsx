@@ -133,7 +133,6 @@ export function ScriptFlowDiagram({ scriptContent }: { scriptContent: string }) 
                 fitView
                 nodesDraggable={false}
                 nodesConnectable={false}
-                className="bg-background"
             >
                 <Controls />
                 <MiniMap />

@@ -87,12 +87,11 @@ body {
   }
 }
 
-@layer utilities {
-  .react-flow__edge-path {
-    stroke: hsl(var(--primary));
-    stroke-width: 2px;
-  }
-  .react-flow__arrowhead path {
-    fill: hsl(var(--primary));
-  }
+.react-flow__edge-path {
+  stroke: hsl(var(--primary));
+  stroke-width: 2px;
+}
+
+.react-flow__arrowhead path {
+  fill: hsl(var(--primary));
 }
