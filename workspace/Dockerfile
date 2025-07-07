@@ -1,32 +1,39 @@
-# Use the official Google Cloud SDK image as the base.
-# This guarantees that gcloud is installed.
-FROM google/cloud-sdk:latest
+# Use the official Google Cloud CLI slim image as a base
+FROM google/cloud-sdk:slim
 
-# Add the gcloud SDK to the system's PATH environment variable.
-# This is the crucial step to make `gcloud` accessible to all processes.
+# Set the PATH to include the Google Cloud SDK. This is crucial.
 ENV PATH /google-cloud-sdk/bin:$PATH
 
-# Install Node.js and npm, which are required to run the Next.js application.
-RUN apt-get update && \
-    apt-get install -y nodejs npm && \
-    # Clean up the apt cache to reduce the final image size.
-    rm -rf /var/lib/apt/lists/*
+# Install dependencies for adding NodeSource repository
+RUN apt-get update && apt-get install -y curl gnupg
 
-# Set the working directory for the application.
+# Add the NodeSource repository for Node.js 20.x
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+
+# Install Node.js
+RUN apt-get install -y nodejs
+
+# Verify installations
+RUN node -v
+RUN npm -v
+RUN gcloud --version
+
+# Set the working directory
 WORKDIR /app
 
-# Copy package files and install dependencies.
-# This is done in a separate step to leverage Docker's layer caching.
+# Copy package files and install dependencies
+# This is optimized for Docker layer caching
 COPY package*.json ./
 RUN npm install
 
-# Copy the rest of the application source code.
+# Copy the rest of the application code
 COPY . .
 
-# Build the Next.js application for production.
+# Build the Next.js app
 RUN npm run build
 
-# Set the command to start the application.
-# Firebase App Hosting automatically sets the PORT environment variable,
-# which `next start` will use.
+# Expose the port the app runs on (App Hosting will map this)
+EXPOSE 8080
+
+# Start the app. App Hosting uses the start script from package.json.
 CMD ["npm", "start"]
