@@ -1,7 +1,14 @@
-# Start with Google's official image that has gcloud pre-installed
-FROM gcr.io/google.com/cloudsdktool/google-cloud-cli:latest
+# Use the official Google Cloud CLI image as the base
+FROM google/google-cloud-cli:latest
 
-# Install Node.js v20
+# Add the Google Cloud SDK to the PATH
+ENV PATH="/google-cloud-sdk/bin:${PATH}"
+
+# Set the working directory
+WORKDIR /app
+
+# Install Node.js and npm
+# We need to add the nodejs repository to get a recent version
 RUN apt-get update && \
     apt-get install -y ca-certificates curl gnupg && \
     mkdir -p /etc/apt/keyrings && \
@@ -9,19 +16,17 @@ RUN apt-get update && \
     NODE_MAJOR=20 && \
     echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list && \
     apt-get update && \
-    apt-get install -y nodejs
+    apt-get install -y nodejs && \
+    npm install -g npm@latest
 
-# Set the working directory
-WORKDIR /app
+# Copy application dependency manifests to the container image
+COPY package.json package-lock.json* ./
 
-# Copy application code
+# Install dependencies
+RUN npm install --production
+
+# Copy local code to the container image
 COPY . .
 
-# Install application dependencies
-RUN npm install
-
-# Firebase App Hosting runs the app on port 8080 by default.
-EXPOSE 8080
-
-# Define the command to run your app
+# Set the command to run when the container starts
 CMD ["npm", "start"]
