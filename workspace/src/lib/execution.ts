@@ -1,19 +1,18 @@
 
-import { spawn } from 'child_process';
+const GCLOUD_RUNNER_URL = 'https://gcloud-runner-532743504408.us-central1.run.app/';
 
-export function runExecutor(
+export async function runExecutor(
     scriptContent: string,
     inputValues: Record<string, string>,
     controller: ReadableStreamDefaultController<any>
 ) {
-    console.log('--- GCloud Commander: Starting Script Execution ---');
+    console.log('--- GCloud Commander: Delegating Script Execution to gcloud-runner ---');
     console.log('Input Values:', inputValues);
 
     const sendData = (data: object) => {
         try {
             controller.enqueue(new TextEncoder().encode(JSON.stringify(data) + '\n'));
         } catch (e) {
-            // Suppress errors from writing to a closed controller
             console.warn("GCloud Commander: Could not write to stream, controller likely closed.");
         }
     };
@@ -24,78 +23,84 @@ export function runExecutor(
             isClosed = true;
             try {
                 controller.close();
-            } catch (e) {
+            } catch (e) { 
                 // Suppress error from closing an already closed controller
             }
         }
-    }
+    };
 
-    const env = { ...process.env, ...inputValues };
-    const executableScript = scriptContent
+    // Construct the script:
+    // 1. Prepend `export` statements for each input variable.
+    const variableExports = Object.entries(inputValues)
+        .map(([key, value]) => `export ${key}='${value.replace(/'/g, "'\\''")}'`) // Safely escape single quotes
+        .join('\n');
+
+    // 2. Remove the 'read -p' lines from the original script content.
+    const scriptBody = scriptContent
         .split('\n')
         .filter(line => !line.trim().startsWith('read -p'))
         .join('\n');
     
-    console.log('Executable Script:\n', executableScript);
+    const executableScript = `${variableExports}\n\n${scriptBody}`;
+    
+    console.log('--- Executable Script to be sent to runner ---\n', executableScript);
 
-    const child = spawn('bash', ['-c', executableScript], { env });
+    try {
+        const response = await fetch(GCLOUD_RUNNER_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command: executableScript })
+        });
 
-    let stepIdCounter = 0;
-    let currentStep = {
-        id: stepIdCounter,
-        title: 'Initializing Execution...',
-        log: '',
-    };
+        const fullLog = await response.text();
 
-    const emitCurrentStep = () => {
-        if (currentStep.log.trim() || currentStep.title !== 'Next Step...') {
-            sendData({ type: 'step', data: { ...currentStep, log: currentStep.log.trim() } });
-            stepIdCounter++;
-            currentStep = {
-                id: stepIdCounter,
-                title: 'Next Step...',
-                log: '',
-            };
+        if (!response.ok) {
+            throw new Error(`gcloud-runner service failed with status ${response.status}: ${fullLog}`);
         }
-    };
 
-    const processData = (data: Buffer) => {
-        const output = data.toString();
-        // Log the raw output to the server console for debugging in Cloud Run
-        console.log('Script output:', output.trim());
+        console.log('--- Full Log from gcloud-runner ---\n', fullLog);
 
-        const lines = output.split('\n');
+        // Parse the full output into steps based on the '---STEP:' delimiter
+        const lines = fullLog.split('\n');
+        const steps = [];
+        let currentStep = {
+            title: 'Initializing Execution...',
+            log: '',
+        };
+
         for (const line of lines) {
-            if (!line) continue;
             if (line.startsWith('---STEP:')) {
-                emitCurrentStep();
+                // If the previous step has content, push it to the array.
+                if (currentStep.log.trim() || currentStep.title !== 'Initializing Execution...') {
+                     steps.push({ ...currentStep, log: currentStep.log.trim() });
+                }
                 const newTitle = line.replace('---STEP:', '').trim();
-                console.log(`GCloud Commander: --- New Step Detected: ${newTitle} ---`);
-                currentStep.title = newTitle;
+                currentStep = {
+                    title: newTitle,
+                    log: '',
+                };
             } else {
                 currentStep.log += line + '\n';
             }
         }
-    };
-
-    child.stdout.on('data', processData);
-    child.stderr.on('data', processData);
-
-    child.on('error', (error) => {
-        console.error('--- GCloud Commander: Script Execution Error ---', error.message);
-        if (isClosed) return;
-        sendData({ type: 'error', data: { message: error.message } });
-        closeController();
-    });
-
-    child.on('close', (code) => {
-        console.log(`--- GCloud Commander: Script Execution Finished with exit code ${code} ---`);
-        if (isClosed) return; // Already handled by an error event
-        emitCurrentStep();
-        if (code !== 0) {
-            sendData({ type: 'error', data: { message: `Script exited with code ${code}.` } });
+        // Add the last step to the array
+        if (currentStep.log.trim() || (steps.length === 0 && currentStep.title !== 'Initializing Execution...')) {
+            steps.push({ ...currentStep, log: currentStep.log.trim() });
         }
+
+        // Stream the parsed steps back to the client to maintain the UI experience
+        for (let i = 0; i < steps.length; i++) {
+            const step = steps[i];
+            sendData({ type: 'step', data: { id: i, title: step.title, log: step.log } });
+        }
+
         sendData({ type: 'end' });
+
+    } catch (error) {
+        console.error('--- GCloud Commander: Error calling gcloud-runner ---', error);
+        const message = error instanceof Error ? error.message : 'An unknown error occurred';
+        sendData({ type: 'error', data: { message } });
+    } finally {
         closeController();
-    });
+    }
 }
