@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import ReactFlow, { Background, Controls, MiniMap, type Node, type Edge } from '@xyflow/react';
+import { ReactFlow, Background, Controls, MiniMap, type Node, type Edge } from '@xyflow/react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Workflow } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
