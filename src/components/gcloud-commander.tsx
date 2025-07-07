@@ -63,7 +63,7 @@ const parseParameters = (scriptContent: string): ScriptParameter[] => {
   const params = new Map<string, ScriptParameter>();
 
   // 1. Detect gcloud flags first to get default values
-  const flagRegex = /--([a-zA-Z0-9_-]+)(?:=|\s+)([^\s"'\\]+)/g;
+  const flagRegex = /--([a-zA-Z0-9_-]+)(?:=|\s+)([^\s"']+)/g;
   const flagMatches = [...scriptContent.matchAll(flagRegex)];
   
   for (const match of flagMatches) {
@@ -158,7 +158,7 @@ export default function GCloudCommander() {
       }
       
       for (const [key, value] of Object.entries(flagInputs)) {
-          const regex = new RegExp(`--${key}(?:=|\s+)[^\\s"'\\]+`, 'g');
+          const regex = new RegExp(`--${key}(?:=|\\s+)[^\\s"']+`, 'g');
           if (hydratedLine.match(regex)) {
               hydratedLine = hydratedLine.replace(regex, `--${key}=${value}`);
           }

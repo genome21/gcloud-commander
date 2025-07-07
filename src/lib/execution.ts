@@ -96,7 +96,7 @@ export async function runExecutor(
 
                 // B. Substitute detected flags (e.g., --zone=VALUE)
                 for (const [key, value] of Object.entries(detectedFlags)) {
-                    const regex = new RegExp(`--${key}(?:=|\s+)[^\\s"'\\]+`, 'g');
+                    const regex = new RegExp(`--${key}(?:=|\\s+)[^\\s"']+`, 'g');
                     if (hydratedCommand.match(regex)) {
                         hydratedCommand = hydratedCommand.replace(regex, `--${key}=${value}`);
                     }
