@@ -4,10 +4,12 @@ const GCLOUD_RUNNER_URL = 'https://gcloud-runner-532743504408.us-central1.run.ap
 export async function runExecutor(
     scriptContent: string,
     inputValues: Record<string, string>,
+    detectedFlags: Record<string, string>,
     controller: ReadableStreamDefaultController<any>
 ) {
     console.log('--- GCloud Commander: Orchestrating Script Execution ---');
-    console.log('Input Values:', inputValues);
+    console.log('Input Variables:', inputValues);
+    console.log('Detected Flags:', detectedFlags);
 
     const sendData = (data: object) => {
         try {
@@ -73,22 +75,31 @@ export async function runExecutor(
     };
 
     try {
-        for (const command of commands) {
-            const stepMatch = command.match(/echo "---STEP:([^"]+)"/);
-            const sleepMatch = command.match(/^sleep (\d+)/);
+        for (const rawCommand of commands) {
+            const stepMatch = rawCommand.match(/echo "---STEP:([^"]+)"/);
+            const sleepMatch = rawCommand.match(/^sleep (\d+)/);
 
             if (stepMatch) {
                 // Handle step delimiter
                 completeAndSendStep();
                 currentStepTitle = stepMatch[1] || 'Untitled Step';
-                currentStepLog += `$ ${command}\n--- STEP: ${currentStepTitle} ---\n`;
-            } else if (command.trim().startsWith('gcloud')) {
+                currentStepLog += `$ ${rawCommand}\n--- STEP: ${currentStepTitle} ---\n`;
+            } else if (rawCommand.trim().startsWith('gcloud')) {
                 // Delegate to gcloud-runner, substituting variables first.
-                
-                let hydratedCommand = command;
+                let hydratedCommand = rawCommand;
+
+                // A. Substitute script variables (e.g., $VAR_NAME)
                 for (const [key, value] of Object.entries(inputValues)) {
                     const regex = new RegExp(`\\$${key}|\\$\\{${key}\\}`, 'g');
-                    hydratedCommand = hydratedCommand.replace(regex, value);
+                    hydratedCommand = hydratedCommand.replace(regex, value || '');
+                }
+
+                // B. Substitute detected flags (e.g., --zone=VALUE)
+                for (const [key, value] of Object.entries(detectedFlags)) {
+                    const regex = new RegExp(`--${key}(?:=|\s+)[^\\s"'\\]+`, 'g');
+                    if (hydratedCommand.match(regex)) {
+                        hydratedCommand = hydratedCommand.replace(regex, `--${key}=${value}`);
+                    }
                 }
                 
                 currentStepLog += `$ ${hydratedCommand}\n`; 
@@ -115,13 +126,13 @@ export async function runExecutor(
             } else if (sleepMatch) {
                 // Handle sleep locally
                 const duration = parseInt(sleepMatch[1], 10);
-                currentStepLog += `$ ${command}\n`;
+                currentStepLog += `$ ${rawCommand}\n`;
                 currentStepLog += `Sleeping for ${duration} seconds...\n`;
                 await new Promise(resolve => setTimeout(resolve, duration * 1000));
                 currentStepLog += `Sleep complete.\n`;
             } else {
                 // Handle other commands (like simple echos) by just logging them
-                currentStepLog += `$ ${command}\n`;
+                currentStepLog += `$ ${rawCommand}\n`;
                 // Non-executable commands are logged for transparency but produce no further output.
             }
         }

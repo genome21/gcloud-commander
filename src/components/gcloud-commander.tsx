@@ -15,6 +15,7 @@ import {
   Pencil,
   FileText,
   Network,
+  Info,
 } from 'lucide-react';
 import { getSummaryForScriptLog, getScripts, saveScript, deleteScript, getProjectInfo, type Script, type ProjectInfo } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -34,9 +35,12 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
-interface Variable {
-  prompt: string;
-  name: string;
+interface ScriptParameter {
+  name: string; // e.g., GCLOUD_PROJECT or zone
+  label: string; // e.g., "GCP Project ID" or "Zone"
+  defaultValue: string; // Default value from script, if any
+  isFlag: boolean; // true if it's a --flag, false if it's a read -p variable
+  from: 'readp' | 'flag';
 }
 
 interface ExecutionStep {
@@ -48,14 +52,60 @@ interface ExecutionStep {
   summaryLoading: boolean;
 }
 
-const parseVariables = (scriptContent: string): Variable[] => {
+const titleCase = (str: string) => {
+    return str.replace(/-/g, ' ').replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
+};
+
+const parseParameters = (scriptContent: string): ScriptParameter[] => {
   if (!scriptContent) return [];
+  const params = new Map<string, ScriptParameter>();
+
+  // 1. Detect gcloud flags first to get default values
+  const flagRegex = /--([a-zA-Z0-9_-]+)(?:=|\s+)([^\s"'\\]+)/g;
+  const flagMatches = [...scriptContent.matchAll(flagRegex)];
+  
+  for (const match of flagMatches) {
+    const name = match[1];
+    const value = match[2];
+    // Don't add if it's a variable substitution
+    if (value.startsWith('$')) continue;
+
+    if (!params.has(name)) {
+        params.set(name, {
+            name: name,
+            label: titleCase(name),
+            defaultValue: value,
+            isFlag: true,
+            from: 'flag',
+        });
+    }
+  }
+
+  // 2. Detect `read -p` variables. These take precedence for labels.
   const variableRegex = /read -p "([^"]+): " ([A-Z_0-9]+)/g;
-  const matches = [...scriptContent.matchAll(variableRegex)];
-  return matches.map((match) => ({
-    prompt: match[1],
-    name: match[2],
-  }));
+  const varMatches = [...scriptContent.matchAll(variableRegex)];
+  
+  for (const match of varMatches) {
+    const label = match[1];
+    const name = match[2];
+    const existing = params.get(name.toLowerCase());
+    if (existing) {
+        // A flag for this variable exists, just update the label
+        existing.label = label;
+        existing.from = 'readp';
+        existing.isFlag = false;
+    } else {
+        params.set(name, {
+            name: name,
+            label: label,
+            defaultValue: '',
+            isFlag: false,
+            from: 'readp',
+        });
+    }
+  }
+  
+  return Array.from(params.values());
 };
 
 export default function GCloudCommander() {
@@ -63,7 +113,7 @@ export default function GCloudCommander() {
   const [scripts, setScripts] = useState<Script[]>([]);
   const [selectedScriptKey, setSelectedScriptKey] = useState<string>('');
   const [isLoadingScripts, setIsLoadingScripts] = useState(true);
-  const [variables, setVariables] = useState<Variable[]>([]);
+  const [parameters, setParameters] = useState<ScriptParameter[]>([]);
   const [inputValues, setInputValues] = useState<Record<string, string>>({});
   const [steps, setSteps] = useState<ExecutionStep[]>([]);
   const [isExecuting, setIsExecuting] = useState(false);
@@ -104,13 +154,19 @@ export default function GCloudCommander() {
   
   useEffect(() => {
       if (selectedScript) {
-        const parsedVars = parseVariables(selectedScript.content);
-        setVariables(parsedVars);
-        setInputValues({});
+        const parsedParams = parseParameters(selectedScript.content);
+        setParameters(parsedParams);
+        
+        const initialValues: Record<string, string> = {};
+        for(const param of parsedParams) {
+            initialValues[param.name] = param.defaultValue;
+        }
+        setInputValues(initialValues);
+
         setSteps([]);
         setExpandedLogs(new Set());
       } else {
-        setVariables([]);
+        setParameters([]);
         setSteps([]);
         setExpandedLogs(new Set());
       }
@@ -127,7 +183,7 @@ export default function GCloudCommander() {
   };
 
   const handleFetchProjectInfo = async () => {
-    const projectId = inputValues['GCLOUD_PROJECT'];
+    const projectId = inputValues['GCLOUD_PROJECT'] || inputValues['project'];
     if (!projectId) {
       toast({ variant: 'destructive', title: 'Missing Project ID', description: 'Please enter a GCP Project ID first.' });
       return;
@@ -150,14 +206,14 @@ export default function GCloudCommander() {
   };
 
   const handleInfoSelect = (type: 'region' | 'zone' | 'network' | 'subnet', value: string) => {
-    // Find a variable that matches the type. e.g. type 'zone' matches variable name 'ZONE' or 'GCP_ZONE'
-    const targetVar = variables.find(v => v.name.toLowerCase().includes(type));
+    // Find a parameter that matches the type. e.g. type 'zone' matches param name 'zone' or 'ZONE'
+    const targetParam = parameters.find(p => p.name.toLowerCase().includes(type));
     
-    if (targetVar) {
-        handleInputChange(targetVar.name, value);
+    if (targetParam) {
+        handleInputChange(targetParam.name, value);
         toast({
             title: `Input Updated`,
-            description: `${targetVar.prompt} has been set to "${value}".`
+            description: `${targetParam.label} has been set to "${value}".`
         });
         setIsInfoDialogOpen(false); // Close dialog on selection
     } else {
@@ -175,6 +231,18 @@ export default function GCloudCommander() {
     setIsExecuting(true);
     setSteps([]);
     setExpandedLogs(new Set());
+
+    // Separate variables from flags based on the parsed parameters
+    const variables: Record<string, string> = {};
+    const detectedFlags: Record<string, string> = {};
+
+    for (const param of parameters) {
+        if (param.isFlag) {
+            detectedFlags[param.name] = inputValues[param.name];
+        } else {
+            variables[param.name] = inputValues[param.name];
+        }
+    }
   
     try {
       const response = await fetch('/api/execute', {
@@ -182,7 +250,8 @@ export default function GCloudCommander() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           scriptContent: selectedScript.content,
-          inputValues: inputValues,
+          inputValues: variables,
+          detectedFlags: detectedFlags,
         }),
       });
   
@@ -303,6 +372,9 @@ export default function GCloudCommander() {
       </div>
     );
   };
+  
+  const readPParams = useMemo(() => parameters.filter(p => p.from === 'readp'), [parameters]);
+  const flagParams = useMemo(() => parameters.filter(p => p.from === 'flag'), [parameters]);
 
   return (
     <>
@@ -361,54 +433,34 @@ export default function GCloudCommander() {
             </div>
         )}
 
-        {selectedScript && (variables.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {variables.map((variable) => {
-              const isProjectInfoField = ['zone', 'region', 'network', 'subnet'].some(keyword =>
-                variable.name.toLowerCase().includes(keyword)
-              );
-              return (
-              <div key={variable.name} className="space-y-2">
-                <Label htmlFor={variable.name}>{variable.prompt}</Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    id={variable.name}
-                    value={inputValues[variable.name] || ''}
-                    onChange={(e) => handleInputChange(variable.name, e.target.value)}
-                    placeholder={`Enter value for ${variable.name}`}
-                    disabled={isExecuting}
-                    className="flex-grow"
-                  />
-                  {isProjectInfoField && (
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                           <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            onClick={handleFetchProjectInfo}
-                            disabled={isExecuting || !inputValues['GCLOUD_PROJECT']}
-                            className="shrink-0"
-                          >
-                            <Network className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Fetch Project Network Info</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  )}
-                </div>
-              </div>
-            )})}
-          </div>
-        ) : selectedScriptKey && !isLoadingScripts && (
-            <div className="text-center text-sm text-muted-foreground p-4 bg-muted/50 rounded-md">
+        {selectedScript && parameters.length > 0 && (
+            <div className="space-y-6">
+                {readPParams.length > 0 && (
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {readPParams.map((param) => <ParameterInput key={param.name} parameter={param} value={inputValues[param.name]} onValueChange={handleInputChange} onFetchInfo={handleFetchProjectInfo} isExecuting={isExecuting} projectId={inputValues['GCLOUD_PROJECT']} />)}
+                    </div>
+                )}
+               
+                {flagParams.length > 0 && (
+                    <div>
+                         <div className="flex items-center gap-2 mb-4">
+                             <Info className="h-4 w-4 text-muted-foreground" />
+                             <h3 className="text-sm font-medium text-muted-foreground">Detected Parameters</h3>
+                             <Separator className="flex-1" />
+                         </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {flagParams.map((param) => <ParameterInput key={param.name} parameter={param} value={inputValues[param.name]} onValueChange={handleInputChange} onFetchInfo={handleFetchProjectInfo} isExecuting={isExecuting} projectId={inputValues['GCLOUD_PROJECT']} />)}
+                        </div>
+                    </div>
+                )}
+            </div>
+        )}
+
+        {selectedScript && parameters.length === 0 && !isLoadingScripts && (
+             <div className="text-center text-sm text-muted-foreground p-4 bg-muted/50 rounded-md">
                 This script does not require any inputs.
             </div>
-        ))}
+        )}
       </CardContent>
       <CardFooter className="flex-col items-stretch gap-6">
         <Button
@@ -507,6 +559,56 @@ export default function GCloudCommander() {
     />
     </>
   );
+}
+
+function ParameterInput({ parameter, value, onValueChange, onFetchInfo, isExecuting, projectId }: {
+  parameter: ScriptParameter;
+  value: string;
+  onValueChange: (name: string, value: string) => void;
+  onFetchInfo: () => void;
+  isExecuting: boolean;
+  projectId?: string;
+}) {
+    const isProjectInfoField = ['zone', 'region', 'network', 'subnet', 'project'].some(keyword =>
+        parameter.name.toLowerCase().includes(keyword)
+    );
+
+    return (
+        <div key={parameter.name} className="space-y-2">
+        <Label htmlFor={parameter.name}>{parameter.label}</Label>
+        <div className="flex items-center gap-2">
+            <Input
+            id={parameter.name}
+            value={value || ''}
+            onChange={(e) => onValueChange(parameter.name, e.target.value)}
+            placeholder={parameter.defaultValue || `Enter value for ${parameter.name}`}
+            disabled={isExecuting}
+            className="flex-grow"
+            />
+            {isProjectInfoField && !parameter.name.toLowerCase().includes('project') && (
+            <TooltipProvider>
+                <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={onFetchInfo}
+                    disabled={isExecuting || (!projectId && !parameter.name.toLowerCase().includes('project'))}
+                    className="shrink-0"
+                    >
+                    <Network className="h-4 w-4" />
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                    <p>Fetch Project Infrastructure Info</p>
+                </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+            )}
+        </div>
+        </div>
+    );
 }
 
 

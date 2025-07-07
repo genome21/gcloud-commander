@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
-    const { scriptContent, inputValues } = await request.json();
+    const { scriptContent, inputValues, detectedFlags } = await request.json();
 
     if (!scriptContent || typeof scriptContent !== 'string') {
       return new Response(JSON.stringify({ error: 'scriptContent is required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
 
     const stream = new ReadableStream({
       async start(controller) {
-        await runExecutor(scriptContent, inputValues || {}, controller);
+        await runExecutor(scriptContent, inputValues || {}, detectedFlags || {}, controller);
       },
     });
 
