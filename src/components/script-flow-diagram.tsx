@@ -134,7 +134,6 @@ export function ScriptFlowDiagram({ scriptContent }: { scriptContent: string }) 
                 nodesDraggable={false}
                 nodesConnectable={false}
                 className="bg-background"
-                hideAttribution
             >
                 <Controls />
                 <MiniMap />
