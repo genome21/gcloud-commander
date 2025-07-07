@@ -1,37 +1,34 @@
-# Use an official Node.js runtime as a parent image.
-# We use a slim image to keep the size down.
+# Use the official Node.js 20 image as a parent image
 FROM node:20-slim
 
-# Install dependencies needed for gcloud SDK and set it up.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    gnupg \
-    apt-transport-https \
-    ca-certificates \
-    && echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list \
-    && curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg \
-    && apt-get update && apt-get install -y google-cloud-sdk \
-    # Clean up apt cache to reduce final image size
-    && rm -rf /var/lib/apt/lists/*
-
-# Set the working directory in the container.
+# Set the working directory in the container
 WORKDIR /app
 
-# Copy package.json and install dependencies.
-# We copy package.json first to leverage Docker's layer caching.
-# The npm install layer will only be re-run if package.json changes.
-COPY package.json ./
-RUN npm install
+# Install system dependencies required for Google Cloud SDK
+RUN apt-get update && apt-get install -y apt-transport-https ca-certificates gnupg curl
 
-# Copy the rest of the application's source code.
+# Add the Google Cloud SDK repository using the recommended gpg method
+RUN curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
+RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee /etc/apt/sources.list.d/google-cloud-sdk.list
+
+# Install the Google Cloud SDK
+RUN apt-get update && apt-get install -y google-cloud-sdk
+
+# Copy package.json and package-lock.json (if available)
+COPY package*.json ./
+
+# Install app dependencies, including dev dependencies needed for the build
+RUN npm install --production=false
+
+# Copy the rest of the application's code
 COPY . .
 
-# Build the Next.js application for production.
+# Build the Next.js application
 RUN npm run build
 
-# Next.js runs on port 3000 by default. Cloud Run will set the PORT env var.
-# We expose a default port for documentation and local testing.
-EXPOSE 8080
+# Expose the port the app runs on
+ENV PORT 9002
+EXPOSE 9002
 
-# The command to run when the container starts.
-CMD ["npm", "start"]
+# Start the app
+CMD ["npm", "start", "-p", "9002"]
