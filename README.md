@@ -20,7 +20,7 @@ In a high-stakes cloud environment, operational errors are costly and a lack of 
 
 ## ✨ Key Features
 
--   **Interactive UI for Shell Scripts**: Run your `gcloud` or any bash scripts from a clean, professional web interface.
+-   **Interactive UI for GCloud Workflows**: Run your `gcloud` workflows from a clean, professional web interface.
 -   **Step-by-Step Execution**: Visualize script execution in real-time, with each logical step clearly displayed and its status tracked.
 -   **Intelligent Parameter Detection**: Automatically discovers parameters in your scripts. It generates user-friendly input fields from both `read -p` declarations and flags (e.g., `--zone`) found directly in `gcloud` commands.
 -   **Contextual Resource Lookups**: Eliminates guesswork by allowing users to fetch and select live project resources—like VPC networks, subnets, zones, and available VM machine types—directly from the UI.
@@ -29,6 +29,16 @@ In a high-stakes cloud environment, operational errors are costly and a lack of 
 -   **Raw Log Access**: Instantly toggle the view to see the raw terminal output for any step, providing deep-dive capability when needed.
 -   **Built-in Script Management**: A secure interface for authorized users to add, edit, and manage the library of available scripts.
 -   **Built with Next.js & ShadCN**: A modern, performant, and beautiful application stack designed for reliability and a best-in-class user experience.
+
+---
+
+## 🎯 Common Use Cases
+
+- Provisioning Identity-Aware Proxy with Workforce Identity Federation
+- Spinning up VMs with specific network & IAM settings
+- Generating project scaffolding with labels, APIs, billing configs
+- Standardizing customer onboarding workflows for multi-tenant setups
+
 
 ---
 
