@@ -149,6 +149,26 @@ export default function GCloudCommander() {
     }
   };
 
+  const handleInfoSelect = (type: 'region' | 'zone' | 'network' | 'subnet', value: string) => {
+    // Find a variable that matches the type. e.g. type 'zone' matches variable name 'ZONE' or 'GCP_ZONE'
+    const targetVar = variables.find(v => v.name.toLowerCase().includes(type));
+    
+    if (targetVar) {
+        handleInputChange(targetVar.name, value);
+        toast({
+            title: `Input Updated`,
+            description: `${targetVar.prompt} has been set to "${value}".`
+        });
+        setIsInfoDialogOpen(false); // Close dialog on selection
+    } else {
+        toast({
+            variant: 'destructive',
+            title: 'No Matching Input',
+            description: `Your script does not seem to have an input field for a ${type}.`
+        });
+    }
+  };
+
 
   const handleExecute = async () => {
     if (!selectedScript?.content) return;
@@ -343,7 +363,11 @@ export default function GCloudCommander() {
 
         {selectedScript && (variables.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {variables.map((variable) => (
+            {variables.map((variable) => {
+              const isProjectInfoField = ['zone', 'region', 'network', 'subnet'].some(keyword =>
+                variable.name.toLowerCase().includes(keyword)
+              );
+              return (
               <div key={variable.name} className="space-y-2">
                 <Label htmlFor={variable.name}>{variable.prompt}</Label>
                 <div className="flex items-center gap-2">
@@ -355,7 +379,7 @@ export default function GCloudCommander() {
                     disabled={isExecuting}
                     className="flex-grow"
                   />
-                  {variable.name.toLowerCase().includes('zone') && (
+                  {isProjectInfoField && (
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -378,7 +402,7 @@ export default function GCloudCommander() {
                   )}
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         ) : selectedScriptKey && !isLoadingScripts && (
             <div className="text-center text-sm text-muted-foreground p-4 bg-muted/50 rounded-md">
@@ -474,7 +498,13 @@ export default function GCloudCommander() {
       </CardFooter>
     </Card>
     <ScriptManagerDialog open={isManaging} onOpenChange={setIsManaging} onScriptsChanged={onScriptsChanged} />
-    <ProjectInfoDialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen} isLoading={isFetchingInfo} info={projectInfo} />
+    <ProjectInfoDialog
+      open={isInfoDialogOpen}
+      onOpenChange={setIsInfoDialogOpen}
+      isLoading={isFetchingInfo}
+      info={projectInfo}
+      onSelect={handleInfoSelect}
+    />
     </>
   );
 }
@@ -615,14 +645,26 @@ function ScriptManagerDialog({ open, onOpenChange, onScriptsChanged }: { open: b
     );
 }
 
-function ProjectInfoDialog({ open, onOpenChange, info, isLoading }: { open: boolean, onOpenChange: (open: boolean) => void, info: ProjectInfo | null, isLoading: boolean }) {
+function ProjectInfoDialog({
+  open,
+  onOpenChange,
+  info,
+  isLoading,
+  onSelect,
+}: {
+  open: boolean,
+  onOpenChange: (open: boolean) => void,
+  info: ProjectInfo | null,
+  isLoading: boolean,
+  onSelect: (type: 'region' | 'zone' | 'network' | 'subnet', value: string) => void,
+}) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Project Infrastructure Details</DialogTitle>
           <DialogDescription>
-            Available regions, zones, networks, and subnets for the selected project.
+            Select an item to populate the corresponding input field.
           </DialogDescription>
         </DialogHeader>
         <div className="flex-grow overflow-hidden relative">
@@ -648,26 +690,40 @@ function ProjectInfoDialog({ open, onOpenChange, info, isLoading }: { open: bool
                 <TabsTrigger value="networks">Networks &amp; Subnets</TabsTrigger>
               </TabsList>
               <ScrollArea className="flex-grow mt-2 pr-4">
-
                 <TabsContent value="regions">
                   <Accordion type="single" collapsible className="w-full">
                     {info?.regions.map((region) => (
                       <AccordionItem value={region.name} key={region.name}>
                         <AccordionTrigger>{region.name}</AccordionTrigger>
                         <AccordionContent>
-                          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 pl-4">
-                            {region.zones.map((zone) => (
-                              <div key={zone} className="p-2 rounded-md bg-muted/50">
-                                <p className="text-sm font-mono text-foreground">{zone}</p>
-                              </div>
-                            ))}
+                          <div className="flex flex-col items-start gap-3 pl-4">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => onSelect('region', region.name)}
+                              className="font-medium"
+                            >
+                              Select Region: {region.name}
+                            </Button>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 w-full">
+                              {region.zones.map((zone) => (
+                                <Button
+                                  key={zone}
+                                  variant="outline"
+                                  size="sm"
+                                  className="p-2 font-mono text-xs justify-start"
+                                  onClick={() => onSelect('zone', zone)}
+                                >
+                                  {zone}
+                                </Button>
+                              ))}
+                            </div>
                           </div>
                         </AccordionContent>
                       </AccordionItem>
                     ))}
                   </Accordion>
                 </TabsContent>
-                
                 <TabsContent value="networks">
                   <Accordion type="single" collapsible className="w-full">
                     {info?.networks.map((network) => (
@@ -681,18 +737,36 @@ function ProjectInfoDialog({ open, onOpenChange, info, isLoading }: { open: bool
                           </div>
                         </AccordionTrigger>
                         <AccordionContent>
-                          {network.subnetworks.length > 0 ? (
-                            <div className="flex flex-col gap-3 pl-4">
-                              {network.subnetworks.map((subnet) => (
-                                <div key={subnet.name} className="p-2 rounded-md bg-muted/50">
-                                    <p className="font-medium text-sm text-foreground">{subnet.name}</p>
-                                    <p className="text-sm text-muted-foreground font-mono">{subnet.range}</p>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-sm text-muted-foreground pl-4">No custom subnetworks found.</p>
-                          )}
+                          <div className="flex flex-col items-start gap-3 pl-4">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => onSelect('network', network.name)}
+                              className="font-medium"
+                            >
+                              Select Network: {network.name}
+                            </Button>
+
+                            {network.subnetworks.length > 0 ? (
+                              <div className="flex flex-col gap-2 w-full">
+                                {network.subnetworks.map((subnet) => (
+                                   <Button
+                                    key={subnet.name}
+                                    variant="outline"
+                                    onClick={() => onSelect('subnet', subnet.name)}
+                                    className="h-auto text-left justify-start"
+                                  >
+                                    <div className="flex flex-col items-start">
+                                      <p className="font-medium text-sm text-foreground">{subnet.name}</p>
+                                      <p className="text-sm text-muted-foreground font-mono">{subnet.range}</p>
+                                    </div>
+                                  </Button>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-muted-foreground pt-2">No custom subnetworks found.</p>
+                            )}
+                           </div>
                         </AccordionContent>
                       </AccordionItem>
                     ))}
