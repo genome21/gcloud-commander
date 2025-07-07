@@ -50,8 +50,10 @@ const parseScriptToFlow = (scriptContent: string): { nodes: Node[], edges: Edge[
     const nodeWidth = 250;
     const xPos = 50;
     let yPos = 0;
+    
+    // Explicitly define edge styles to avoid CSS conflicts
+    const primaryColor = '#9D4EDD';
     const edgeType = 'smoothstep';
-    const primaryColor = '#9D4EDD'; // Use a hardcoded hex color
     const markerEnd = { type: MarkerType.ArrowClosed, color: primaryColor };
     const edgeStyle = {
         stroke: primaryColor,
