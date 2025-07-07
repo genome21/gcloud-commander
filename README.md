@@ -141,3 +141,16 @@ GCloud Commander is designed to be a secure frontend for internal use. It inheri
 ## ⚠️ Disclaimer
 
 This application provides a powerful interface for executing cloud commands. Misuse can lead to unintended infrastructure changes. Ensure that the backend service has the appropriate IAM permissions and security guardrails in place.
+
+---
+
+## 📄 License
+
+This project is proprietary and not open source.  
+See [LICENSE](./LICENSE) for full terms of use and restrictions.
+
+## 👤 Connect with the Developer
+
+[<img src="./src/assets/LI-Logo.png" alt="LinkedIn" style="width:200px;"/>](https://www.linkedin.com/in/robertwilkinsiii/)
+&nbsp;
+[<img src="./src/assets/GitHub_Logo.png" alt="GitHub" style="width:200px;"/>](https://github.com/genome21)
