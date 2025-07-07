@@ -1,0 +1,6 @@
+
+{
+  "name": "Echo Project and Network Info",
+  "description": "A test script to verify project info selection. It takes project, region, zone, network, and subnet as input and echoes them back.",
+  "script": "echo-project-info.sh"
+}
