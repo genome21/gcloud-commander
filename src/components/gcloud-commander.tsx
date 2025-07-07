@@ -14,8 +14,9 @@ import {
   Trash2,
   Pencil,
   FileText,
+  Network,
 } from 'lucide-react';
-import { getSummaryForScriptLog, getScripts, saveScript, deleteScript, type Script } from '@/app/actions';
+import { getSummaryForScriptLog, getScripts, saveScript, deleteScript, getProjectInfo, type Script, type ProjectInfo } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -24,11 +25,14 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose, DialogDescription } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { AnimatePresence, motion } from 'framer-motion';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 interface Variable {
   prompt: string;
@@ -65,6 +69,11 @@ export default function GCloudCommander() {
   const [isExecuting, setIsExecuting] = useState(false);
   const [isManaging, setIsManaging] = useState(false);
   const [expandedLogs, setExpandedLogs] = useState<Set<number>>(new Set());
+
+  // State for Project Info Dialog
+  const [projectInfo, setProjectInfo] = useState<ProjectInfo | null>(null);
+  const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
+  const [isFetchingInfo, setIsFetchingInfo] = useState(false);
 
   const selectedScript = useMemo(() => {
     return scripts.find(s => s.key === selectedScriptKey);
@@ -116,6 +125,30 @@ export default function GCloudCommander() {
   const handleInputChange = (name: string, value: string) => {
     setInputValues((prev) => ({ ...prev, [name]: value }));
   };
+
+  const handleFetchProjectInfo = async () => {
+    const projectId = inputValues['GCLOUD_PROJECT'];
+    if (!projectId) {
+      toast({ variant: 'destructive', title: 'Missing Project ID', description: 'Please enter a GCP Project ID first.' });
+      return;
+    }
+
+    setIsFetchingInfo(true);
+    setIsInfoDialogOpen(true);
+    setProjectInfo(null);
+
+    try {
+      const info = await getProjectInfo(projectId);
+      setProjectInfo(info);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'An unknown error occurred.';
+      toast({ variant: 'destructive', title: 'Error Fetching Info', description: message });
+      setIsInfoDialogOpen(false); // Close dialog on error
+    } finally {
+      setIsFetchingInfo(false);
+    }
+  };
+
 
   const handleExecute = async () => {
     if (!selectedScript?.content) return;
@@ -313,13 +346,37 @@ export default function GCloudCommander() {
             {variables.map((variable) => (
               <div key={variable.name} className="space-y-2">
                 <Label htmlFor={variable.name}>{variable.prompt}</Label>
-                <Input
-                  id={variable.name}
-                  value={inputValues[variable.name] || ''}
-                  onChange={(e) => handleInputChange(variable.name, e.target.value)}
-                  placeholder={`Enter value for ${variable.name}`}
-                  disabled={isExecuting}
-                />
+                <div className="flex items-center gap-2">
+                  <Input
+                    id={variable.name}
+                    value={inputValues[variable.name] || ''}
+                    onChange={(e) => handleInputChange(variable.name, e.target.value)}
+                    placeholder={`Enter value for ${variable.name}`}
+                    disabled={isExecuting}
+                    className="flex-grow"
+                  />
+                  {variable.name.toLowerCase().includes('zone') && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                           <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={handleFetchProjectInfo}
+                            disabled={isExecuting || !inputValues['GCLOUD_PROJECT']}
+                            className="shrink-0"
+                          >
+                            <Network className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Fetch Project Network Info</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -417,6 +474,7 @@ export default function GCloudCommander() {
       </CardFooter>
     </Card>
     <ScriptManagerDialog open={isManaging} onOpenChange={setIsManaging} onScriptsChanged={onScriptsChanged} />
+    <ProjectInfoDialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen} isLoading={isFetchingInfo} info={projectInfo} />
     </>
   );
 }
@@ -555,4 +613,96 @@ function ScriptManagerDialog({ open, onOpenChange, onScriptsChanged }: { open: b
             </DialogContent>
         </Dialog>
     );
+}
+
+function ProjectInfoDialog({ open, onOpenChange, info, isLoading }: { open: boolean, onOpenChange: (open: boolean) => void, info: ProjectInfo | null, isLoading: boolean }) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Project Infrastructure Details</DialogTitle>
+          <DialogDescription>
+            Available regions, zones, networks, and subnets for the selected project.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex-grow overflow-hidden relative">
+          {isLoading ? (
+            <div className="space-y-4 p-1">
+              <div className="space-y-2">
+                  <Skeleton className="h-5 w-1/4" />
+                  <Skeleton className="h-10 w-full" />
+              </div>
+              <div className="space-y-2">
+                  <Skeleton className="h-5 w-1/4" />
+                  <Skeleton className="h-10 w-full" />
+              </div>
+               <div className="space-y-2">
+                  <Skeleton className="h-5 w-1/4" />
+                  <Skeleton className="h-10 w-full" />
+              </div>
+            </div>
+          ) : (
+            <Tabs defaultValue="regions" className="h-full flex flex-col">
+              <TabsList className="shrink-0">
+                <TabsTrigger value="regions">Regions &amp; Zones</TabsTrigger>
+                <TabsTrigger value="networks">Networks &amp; Subnets</TabsTrigger>
+              </TabsList>
+              <ScrollArea className="flex-grow mt-2 pr-4">
+
+                <TabsContent value="regions">
+                  <Accordion type="single" collapsible className="w-full">
+                    {info?.regions.map((region) => (
+                      <AccordionItem value={region.name} key={region.name}>
+                        <AccordionTrigger>{region.name}</AccordionTrigger>
+                        <AccordionContent>
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 pl-4">
+                            {region.zones.map((zone) => (
+                              <div key={zone} className="p-2 rounded-md bg-muted/50">
+                                <p className="text-sm font-mono text-foreground">{zone}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
+                </TabsContent>
+                
+                <TabsContent value="networks">
+                  <Accordion type="single" collapsible className="w-full">
+                    {info?.networks.map((network) => (
+                      <AccordionItem value={network.name} key={network.name}>
+                        <AccordionTrigger>
+                          <div className="flex flex-col items-start text-left">
+                              <p>{network.name}</p>
+                              <p className="text-xs text-muted-foreground font-mono">
+                                {network.ipv4Range}
+                              </p>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          {network.subnetworks.length > 0 ? (
+                            <div className="flex flex-col gap-3 pl-4">
+                              {network.subnetworks.map((subnet) => (
+                                <div key={subnet.name} className="p-2 rounded-md bg-muted/50">
+                                    <p className="font-medium text-sm text-foreground">{subnet.name}</p>
+                                    <p className="text-sm text-muted-foreground font-mono">{subnet.range}</p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground pl-4">No custom subnetworks found.</p>
+                          )}
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
+                </TabsContent>
+              </ScrollArea>
+            </Tabs>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
 }

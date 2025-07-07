@@ -18,6 +18,97 @@ export interface ScriptMetadata {
     description: string;
 }
 
+// --- Project Info Fetching ---
+const GCLOUD_RUNNER_URL = 'https://gcloud-runner-532743504408.us-central1.run.app/';
+
+async function runGcloudCommand(command: string): Promise<any> {
+    const response = await fetch(GCLOUD_RUNNER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command }),
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`gcloud-runner request failed with status ${response.status}:`, errorText);
+        throw new Error(`gcloud-runner request failed with status ${response.status}`);
+    }
+
+    const result = await response.json();
+
+    if (result.returncode !== 0) {
+        console.error(`Command "${command}" failed with exit code ${result.returncode}:\n${result.stderr}`);
+        throw new Error(`Command failed with exit code ${result.returncode}:\n${result.stderr}`);
+    }
+    
+    try {
+        return JSON.parse(result.stdout);
+    } catch (e) {
+        return result.stdout;
+    }
+}
+
+export interface RegionInfo {
+    name: string;
+    zones: string[];
+}
+export interface NetworkInfo {
+    name: string;
+    ipv4Range: string;
+    subnetworks: { name: string; range: string }[];
+}
+
+export interface ProjectInfo {
+    regions: RegionInfo[];
+    networks: NetworkInfo[];
+}
+
+export async function getProjectInfo(projectId: string): Promise<ProjectInfo> {
+    if (!projectId || projectId.trim() === '') {
+        throw new Error("Project ID is required.");
+    }
+
+    const [regionsData, networksData, subnetsData] = await Promise.all([
+        runGcloudCommand(`gcloud compute regions list --project=${projectId} --format="json(name,zones)"`),
+        runGcloudCommand(`gcloud compute networks list --project=${projectId} --format="json(name,IPv4Range)"`),
+        runGcloudCommand(`gcloud compute networks subnets list --project=${projectId} --format="json(name,ipCidrRange,network)"`)
+    ]);
+
+    const regions: RegionInfo[] = regionsData.map((region: any) => ({
+        name: region.name,
+        zones: region.zones.map((zoneUrl: string) => zoneUrl.split('/').pop()!).sort(),
+    })).sort((a: RegionInfo, b: RegionInfo) => a.name.localeCompare(b.name));
+
+    const networksMap = new Map<string, NetworkInfo>();
+    for (const network of networksData) {
+        const networkName = network.name;
+        // Construct the full URL format that subnets reference
+        const networkUrl = `https://www.googleapis.com/compute/v1/projects/${projectId}/global/networks/${networkName}`;
+        networksMap.set(networkUrl, {
+            name: networkName,
+            ipv4Range: network.IPv4Range || 'N/A',
+            subnetworks: [],
+        });
+    }
+
+    for (const subnet of subnetsData) {
+        const networkInfo = networksMap.get(subnet.network);
+        if (networkInfo) {
+            networkInfo.subnetworks.push({
+                name: subnet.name,
+                range: subnet.ipCidrRange,
+            });
+        }
+    }
+    
+    const networks: NetworkInfo[] = Array.from(networksMap.values()).sort((a,b) => a.name.localeCompare(b.name));
+    networks.forEach(n => n.subnetworks.sort((a,b) => a.name.localeCompare(b.name)));
+
+    return { regions, networks };
+}
+
+
+// --- Script Management ---
 const scriptsDir = path.join(process.cwd(), 'scripts');
 
 async function ensureScriptsDirExists() {
