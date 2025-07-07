@@ -17,6 +17,7 @@ import {
   Network,
   Info,
   Cpu,
+  FileSearch,
 } from 'lucide-react';
 import { getSummaryForScriptLog, getScripts, saveScript, deleteScript, getProjectInfo, getMachineTypes, type Script, type ProjectInfo, type MachineTypeInfo } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -130,10 +131,43 @@ export default function GCloudCommander() {
   const [machineTypes, setMachineTypes] = useState<MachineTypeInfo[]>([]);
   const [isMachineTypeDialogOpen, setIsMachineTypeDialogOpen] = useState(false);
   const [isFetchingMachineTypes, setIsFetchingMachineTypes] = useState(false);
+  
+  // State for script preview
+  const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false);
 
   const selectedScript = useMemo(() => {
     return scripts.find(s => s.key === selectedScriptKey);
   }, [scripts, selectedScriptKey]);
+
+  const previewScriptContent = useMemo(() => {
+    if (!selectedScript) return '';
+
+    const readPInputs = Object.fromEntries(parameters.filter(p => p.from === 'readp').map(p => [p.name, inputValues[p.name] ?? p.defaultValue]));
+    const flagInputs = Object.fromEntries(parameters.filter(p => p.from === 'flag').map(p => [p.name, inputValues[p.name] ?? p.defaultValue]));
+
+    const scriptLines = selectedScript.content
+      .split('\n')
+      .filter(line => !line.trim().startsWith('read -p') && !line.trim().startsWith('#!/bin/bash'));
+
+    const hydratedLines = scriptLines.map(line => {
+      let hydratedLine = line;
+
+      for (const [key, value] of Object.entries(readPInputs)) {
+          const regex = new RegExp(`\\$${key}|\\$\\{${key}\\}`, 'g');
+          hydratedLine = hydratedLine.replace(regex, value || '');
+      }
+      
+      for (const [key, value] of Object.entries(flagInputs)) {
+          const regex = new RegExp(`--${key}(?:=|\s+)[^\\s"'\\]+`, 'g');
+          if (hydratedLine.match(regex)) {
+              hydratedLine = hydratedLine.replace(regex, `--${key}=${value}`);
+          }
+      }
+      return hydratedLine;
+    });
+    
+    return hydratedLines.join('\n');
+  }, [selectedScript, parameters, inputValues]);
 
 
   const fetchScripts = useCallback(async () => {
@@ -514,18 +548,38 @@ export default function GCloudCommander() {
         )}
       </CardContent>
       <CardFooter className="flex-col items-stretch gap-6">
-        <Button
-          onClick={handleExecute}
-          disabled={isExecuting || !selectedScriptKey || isLoadingScripts}
-          className="w-full font-bold text-lg py-6"
-        >
-          {isExecuting ? (
-            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-          ) : (
-            <PlayCircle className="mr-2 h-5 w-5" />
-          )}
-          {isExecuting ? 'Executing...' : 'Execute Script'}
-        </Button>
+        <div className="flex w-full items-stretch gap-4">
+          <Button
+            onClick={handleExecute}
+            disabled={isExecuting || !selectedScriptKey || isLoadingScripts}
+            className="w-full font-bold text-lg py-6 flex-grow"
+          >
+            {isExecuting ? (
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+            ) : (
+              <PlayCircle className="mr-2 h-5 w-5" />
+            )}
+            {isExecuting ? 'Executing...' : 'Execute Script'}
+          </Button>
+          <TooltipProvider>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button
+                        variant="outline"
+                        size="lg"
+                        className="px-4"
+                        onClick={() => setIsPreviewDialogOpen(true)}
+                        disabled={isExecuting || !selectedScriptKey || isLoadingScripts}
+                    >
+                        <FileSearch className="h-5 w-5" />
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                    <p>Preview Script</p>
+                </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
         {steps.length > 0 && (
           <div className="w-full space-y-4">
              <Separator />
@@ -614,6 +668,11 @@ export default function GCloudCommander() {
         isLoading={isFetchingMachineTypes}
         machineTypes={machineTypes}
         onSelect={handleMachineTypeSelect}
+    />
+    <ScriptPreviewDialog
+      open={isPreviewDialogOpen}
+      onOpenChange={setIsPreviewDialogOpen}
+      scriptContent={previewScriptContent}
     />
     </>
   );
@@ -1017,4 +1076,37 @@ function MachineTypeDialog({
       </DialogContent>
     </Dialog>
   )
+}
+
+function ScriptPreviewDialog({
+  open,
+  onOpenChange,
+  scriptContent
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  scriptContent: string;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Script Execution Preview</DialogTitle>
+          <DialogDescription>
+            This is the script that will be executed, with all variables and parameters substituted.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="my-4">
+          <pre className="text-xs p-4 bg-muted rounded-md whitespace-pre-wrap font-mono text-muted-foreground max-h-[50vh] overflow-auto">
+            <code>{scriptContent}</code>
+          </pre>
+        </div>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline">Close</Button>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
