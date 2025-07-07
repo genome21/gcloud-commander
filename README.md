@@ -12,7 +12,7 @@ In a high-stakes cloud environment, operational errors are costly and a lack of 
 
 -   **Democratizing Operations:** Empowers team members to execute approved, complex scripts without needing deep shell expertise or direct machine access.
 -   **Enhancing Visibility & Auditability:** Provides a real-time, step-by-step view of script execution, making processes transparent and easy to debug.
--   **Reducing Human Error:** Replaces manual CLI work with a guided UI, using dynamic forms for variables to prevent typos and incorrect parameter passing.
+-   **Reducing Human Error:** Replaces manual CLI work with a guided UI, using dynamic forms and contextual lookups to prevent typos and incorrect parameter passing.
 -   **Injecting AI Intelligence:** Leverages generative AI to automatically summarize log outputs, allowing operators to quickly understand the outcome of each step without parsing verbose logs.
 -   **Decoupling UI from Execution:** Serves as the secure, interactive interface for the `GCloud Command Executor` microservice, adhering to modern security and architectural best practices.
 
@@ -22,7 +22,9 @@ In a high-stakes cloud environment, operational errors are costly and a lack of 
 
 -   **Interactive UI for Shell Scripts**: Run your `gcloud` or any bash scripts from a clean, professional web interface.
 -   **Step-by-Step Execution**: Visualize script execution in real-time, with each logical step clearly displayed and its status tracked.
--   **Dynamic Input Variables**: Automatically generates input fields based on `read -p` declarations in your scripts, making them easy to configure.
+-   **Intelligent Parameter Detection**: Automatically discovers parameters in your scripts. It generates user-friendly input fields from both `read -p` declarations and flags (e.g., `--zone`) found directly in `gcloud` commands.
+-   **Contextual Resource Lookups**: Eliminates guesswork by allowing users to fetch and select live project resources—like VPC networks, subnets, zones, and available VM machine types—directly from the UI.
+-   **Pre-flight Execution Preview**: Review the final, fully-rendered command with all variables substituted before execution, ensuring complete accuracy and preventing errors.
 -   **AI-Powered Summaries**: Get a concise, AI-generated summary for the output of each step, highlighting key outcomes and events.
 -   **Raw Log Access**: Instantly toggle the view to see the raw terminal output for any step, providing deep-dive capability when needed.
 -   **Built-in Script Management**: A secure interface for authorized users to add, edit, and manage the library of available scripts.
@@ -68,48 +70,49 @@ To break your script into logical steps that are displayed individually in the U
 echo "---STEP:Your Step Title"
 ```
 
-**Example:**
+### Defining User Inputs
 
-```sh
-#!/bin/bash
-# This script will be displayed in the UI as three distinct steps.
+GCloud Commander offers two powerful ways to create inputs for your scripts:
 
-echo "---STEP:Validating Project Configuration"
-gcloud config set project $GCLOUD_PROJECT
+**1. Explicitly with `read -p` (for User-Friendly Labels)**
 
-echo "---STEP:Provisioning High-Memory VM Instance"
-gcloud compute instances create $VM_NAME --zone=$ZONE --machine-type=n2-highmem-4
-
-echo "---STEP:Verifying Deployment and Network Status"
-gcloud compute instances describe $VM_NAME --zone=$ZONE
-```
-
-### Defining Input Variables
-
-To prompt the user for input variables, use the `read -p` command. The application parses these lines to automatically generate a type-safe input form in the UI.
+To prompt the user with a custom label for an input, use the `read -p` command. This is the best way to create a clear, human-readable form.
 
 The format is: `read -p "Prompt for User: " VARIABLE_NAME`
 
 -   `"Prompt for User: "` becomes the label for the input field.
--   `VARIABLE_NAME` is the environment variable that will be substituted with the user's input when the script is executed.
+-   `VARIABLE_NAME` is the environment variable that will be substituted when the script is executed.
 
-> **Important:** The `read -p` lines are used **only for UI generation**. When the script is executed, these lines are ignored, and the values from the UI are securely injected into the `gcloud` commands by the orchestrator before being sent to the backend.
+**2. Automatically from `gcloud` Commands (for Rapid Development)**
 
-**Example:**
+For maximum efficiency, GCloud Commander also automatically inspects your `gcloud` commands and finds any parameters you've used (e.g., `--zone=us-central1-a` or `--machine-type=e2-medium`). It will generate an input field for each detected flag, pre-filled with the value from your script.
+
+This means you can write a standard `gcloud` command, and the UI will automatically make it configurable without any extra work.
+
+> **Important:** The `read -p` lines and detected parameters are used **only for UI generation**. When the script is executed, these lines are ignored, and the values from the UI are securely injected into the `gcloud` commands by the orchestrator before being sent to the backend.
+
+**Example Combining Both Methods:**
 
 ```sh
 #!/bin/bash
+# A more robust script combining a friendly prompt with a detected parameter.
 read -p "Target GCP Project ID: " GCLOUD_PROJECT
-read -p "New VM Instance Name: " VM_NAME
-read -p "Deployment Zone (e.g., us-central1-a): " ZONE
 
 echo "---STEP:Creating VM"
-echo "Submitting request to create VM $VM_NAME in project $GCLOUD_PROJECT..."
+echo "Submitting request to create VM my-instance in project $GCLOUD_PROJECT..."
 
-gcloud compute instances create $VM_NAME --zone=$ZONE --image-family=ubuntu-2204-lts --image-project=ubuntu-os-cloud
+# The UI will detect --zone and --machine-type and create inputs for them.
+gcloud compute instances create my-instance \
+    --project=$GCLOUD_PROJECT \
+    --zone=us-central1-c \
+    --machine-type=e2-medium \
+    --image-family=ubuntu-2204-lts \
+    --image-project=ubuntu-os-cloud
 ```
 
-In the UI, this script will generate three labeled input fields, ensuring the user provides all necessary information before execution.
+In the UI, this script generates:
+- An input with the label "Target GCP Project ID:".
+- A collapsible "Detected Parameters" section with inputs for "zone" and "machine-type", pre-filled with the values from the command.
 
 ---
 
