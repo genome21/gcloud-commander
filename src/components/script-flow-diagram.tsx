@@ -37,71 +37,78 @@ const nodeTypes = {
 };
 
 const parseScriptToFlow = (scriptContent: string): { nodes: Node[], edges: Edge[] } => {
-    if (!scriptContent || scriptContent.trim() === '') return { nodes: [], edges: [] };
-    
-    // Split by step delimiter, but keep the delimiter with the following content.
-    const stepsRaw = scriptContent.split(/(?=---STEP:)/g);
+    if (!scriptContent || scriptContent.trim() === '') {
+        return { nodes: [], edges: [] };
+    }
+
     const nodes: Node[] = [];
     const edges: Edge[] = [];
     const xPos = 150;
     let yPos = 0;
 
-    // Start Node
-    nodes.push({
-        id: 'start',
-        type: 'input',
-        data: { label: 'Start Execution' },
-        position: { x: xPos, y: yPos },
-    });
-
+    // 1. Add Start Node
+    nodes.push({ id: 'start', type: 'input', data: { label: 'Start Execution' }, position: { x: xPos, y: yPos } });
     let previousNodeId = 'start';
     yPos += 100;
-    
-    stepsRaw.filter(s => s.trim()).forEach((step, index) => {
-        const lines = step.trim().split('\n');
-        const titleLine = lines.shift() || '';
-        const titleMatch = titleLine.match(/---STEP:(.+)/);
-        const title = titleMatch ? titleMatch[1].trim() : `Step ${index + 1}`;
-        const commands = lines.join('\n').trim();
 
-        const nodeId = `step-${index}`;
-        const nodeHeight = (commands.split('\n').length * 15) + 100;
+    // 2. Split script into chunks by the step delimiter
+    const stepDelimiterRegex = /(?=echo "---STEP:[^"]+")/g;
+    const chunks = scriptContent.split(stepDelimiterRegex).filter(s => s.trim());
 
+    // 3. Process chunks into nodes and edges
+    if (chunks.length === 0) {
+        // Case: Script has content but no ---STEP delimiters
+        const commands = scriptContent.trim();
+        const nodeId = 'step-0';
+        const nodeHeight = Math.min((commands.split('\n').length * 15) + 100, 250);
+        
         nodes.push({
-            id: nodeId,
-            type: 'custom',
-            position: { x: 0, y: yPos },
-            data: { label: title, commands: commands || "No commands in this step." },
+            id: nodeId, type: 'custom', position: { x: 0, y: yPos },
+            data: { label: 'Script Commands', commands: commands },
         });
-
-        yPos += Math.min(nodeHeight, 250) + 50; // Use estimated height, capped
-
-        edges.push({
-            id: `e-${previousNodeId}-${nodeId}`,
-            source: previousNodeId,
-            target: nodeId,
-            animated: true,
-            style: { stroke: 'hsl(var(--primary))' }
-        });
-
+        yPos += nodeHeight + 50;
+        edges.push({ id: `e-start-${nodeId}`, source: 'start', target: nodeId, animated: true, style: { stroke: 'hsl(var(--primary))' } });
         previousNodeId = nodeId;
-    });
 
-    // End Node
+    } else {
+        // Case: Script has steps
+        chunks.forEach((chunk, index) => {
+            let title: string;
+            let commands: string;
+            
+            const titleMatch = chunk.match(/echo "---STEP:([^"]+)"/);
+
+            if (titleMatch) {
+                // This chunk is a formal step
+                title = titleMatch[1].trim();
+                const lines = chunk.split('\n').slice(1); // All lines after the title
+                commands = lines.join('\n').trim();
+            } else {
+                // This is content before the first step
+                title = 'Initial Commands';
+                commands = chunk.trim();
+            }
+            
+            const nodeId = `step-${index}`;
+            const nodeHeight = Math.min((commands.split('\n').length * 15) + 100, 250);
+
+            nodes.push({
+                id: nodeId,
+                type: 'custom',
+                position: { x: 0, y: yPos },
+                data: { label: title, commands: commands || "No commands in this step." },
+            });
+            
+            yPos += nodeHeight + 50;
+            edges.push({ id: `e-${previousNodeId}-${nodeId}`, source: previousNodeId, target: nodeId, animated: true, style: { stroke: 'hsl(var(--primary))' } });
+            previousNodeId = nodeId;
+        });
+    }
+
+    // 4. Add End Node
     yPos += 25;
-    nodes.push({
-        id: 'end',
-        type: 'output',
-        data: { label: 'End Execution' },
-        position: { x: xPos, y: yPos },
-    });
-
-    edges.push({
-        id: `e-${previousNodeId}-end`,
-        source: previousNodeId,
-        target: 'end',
-        style: { stroke: 'hsl(var(--primary))' }
-    });
+    nodes.push({ id: 'end', type: 'output', data: { label: 'End Execution' }, position: { x: xPos, y: yPos } });
+    edges.push({ id: `e-${previousNodeId}-end`, source: previousNodeId, target: 'end', style: { stroke: 'hsl(var(--primary))' } });
 
     return { nodes, edges };
 };
