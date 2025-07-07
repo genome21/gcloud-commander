@@ -1,36 +1,39 @@
-# Use the official Node.js 20 image as a base, as it's a standard for Node apps.
+# 1. Use the official Node.js 20 image as a parent image
 FROM node:20-slim
 
-# Set the working directory inside the container.
-WORKDIR /app
+# Switch to root user to install dependencies
+USER root
 
-# Install dependencies needed to add the gcloud repository.
+# 2. Install dependencies for Google Cloud SDK
 RUN apt-get update && apt-get install -y apt-transport-https ca-certificates gnupg curl
 
-# Install the Google Cloud SDK using the recommended, non-deprecated method.
-RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee /etc/apt/sources.list.d/google-cloud-sdk.list
+# 3. Add the Google Cloud SDK repository
 RUN curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
+RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+
+# 4. Install the Google Cloud SDK
 RUN apt-get update && apt-get install -y google-cloud-sdk
 
-# The gcloud SDK is installed in /usr/lib/google-cloud-sdk. Add it to the system's PATH.
-# This is the crucial step that makes the `gcloud` command available everywhere.
-ENV PATH="/usr/lib/google-cloud-sdk/bin:${PATH}"
+# 5. Add gcloud to the PATH for all users and processes
+ENV PATH /usr/lib/google-cloud-sdk/bin:$PATH
 
-# Copy package.json to leverage Docker layer caching.
+# Create app directory and switch to non-root user
+WORKDIR /usr/src/app
+
+# Copy application dependency manifests to the container image.
+# A wildcard is used to ensure both package.json AND package-lock.json are copied.
+# Copying this first prevents re-running npm install on every code change.
 COPY package.json ./
 
-# Install application dependencies.
+# Install app dependencies
 RUN npm install
 
-# Copy the rest of the application's source code.
+# Copy local code to the container image.
 COPY . .
 
-# Build the Next.js application for production.
+# Build the app
 RUN npm run build
 
 # The PORT environment variable is automatically set by Cloud Run.
-# `npm start` (which runs `next start`) will use it. We expose 8080 as a standard.
-EXPOSE 8080
-
-# The command to start the application. Cloud Run will use this.
+# The default start script from Next.js is `next start`.
 CMD ["npm", "start"]
