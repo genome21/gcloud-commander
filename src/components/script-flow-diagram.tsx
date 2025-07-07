@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import ReactFlow, { Background, Controls, MiniMap, type Node, type Edge } from 'reactflow';
+import ReactFlow, { Background, Controls, MiniMap, type Node, type Edge } from '@xyflow/react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Workflow } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -134,7 +134,7 @@ export function ScriptFlowDiagram({ scriptContent }: { scriptContent: string }) 
                 nodesDraggable={false}
                 nodesConnectable={false}
                 className="bg-background"
-                proOptions={{hideAttribution: true}}
+                hideAttribution
             >
                 <Controls />
                 <MiniMap />
