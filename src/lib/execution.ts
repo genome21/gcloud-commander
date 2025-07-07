@@ -6,7 +6,7 @@ export async function runExecutor(
     inputValues: Record<string, string>,
     controller: ReadableStreamDefaultController<any>
 ) {
-    console.log('--- GCloud Commander: Orchestrating Script Execution via gcloud-runner ---');
+    console.log('--- GCloud Commander: Orchestrating Script Execution ---');
     console.log('Input Values:', inputValues);
 
     const sendData = (data: object) => {
@@ -29,23 +29,22 @@ export async function runExecutor(
         }
     };
 
-    // Construct the script:
-    // 1. Prepend `export` statements for each input variable.
+    // 1. Prepare the script
     const variableExports = Object.entries(inputValues)
-        .map(([key, value]) => `export ${key}='${value.replace(/'/g, "'\\''")}'`) // Safely escape single quotes
+        .map(([key, value]) => `export ${key}='${value.replace(/'/g, "'\\''")}'`)
         .join('\n');
-
-    // 2. Remove the 'read -p' lines from the original script content.
+    
     const scriptBody = scriptContent
         .split('\n')
-        .filter(line => !line.trim().startsWith('read -p'))
+        .filter(line => 
+            !line.trim().startsWith('read -p') && 
+            !line.trim().startsWith('#!/bin/bash')
+        )
         .join('\n');
     
-    const fullScriptPrefix = `${variableExports}\n`;
-    
-    // Parse script into executable commands, handling multi-line commands ending with '\'
+    // 2. Parse into commands, handling multi-line commands
     const lines = scriptBody.split('\n');
-    const commands = [];
+    const commands: string[] = [];
     let currentCommand = '';
 
     for (const line of lines) {
@@ -54,7 +53,7 @@ export async function runExecutor(
 
         currentCommand += trimmedLine;
         if (trimmedLine.endsWith('\\')) {
-            currentCommand = currentCommand.slice(0, -1) + ' '; // remove trailing \ and add space for next line
+            currentCommand = currentCommand.slice(0, -1) + ' '; 
         } else {
             commands.push(currentCommand);
             currentCommand = '';
@@ -64,6 +63,7 @@ export async function runExecutor(
         commands.push(currentCommand.trim());
     }
 
+    // 3. Orchestrate execution
     let stepId = 0;
     let currentStepTitle = 'Initializing Execution...';
     let currentStepLog = '';
@@ -72,23 +72,26 @@ export async function runExecutor(
         if (currentStepLog.trim() || currentStepTitle !== 'Initializing Execution...') {
             sendData({ type: 'step', data: { id: stepId, title: currentStepTitle, log: currentStepLog.trim() } });
             stepId++;
-            currentStepLog = ''; // Reset log for next step
+            currentStepLog = ''; 
         }
     };
 
     try {
         for (const command of commands) {
-            if (command.startsWith('echo "---STEP:')) {
-                completeAndSendStep();
-                const newTitle = command.match(/echo "---STEP:([^"]+)"/)?.[1];
-                currentStepTitle = newTitle || 'Untitled Step';
-                // Add a marker to the log for transparency
-                currentStepLog += `$ ${command}\n--- STEP: ${currentStepTitle} ---\n`;
-            } else {
-                currentStepLog += `$ ${command}\n`; // Show the command being executed in the log
+            const stepMatch = command.match(/echo "---STEP:([^"]+)"/);
+            const sleepMatch = command.match(/^sleep (\d+)/);
 
-                // Prepend exports to every command to ensure environment variables are available in the stateless runner
-                const commandWithExports = `${fullScriptPrefix}\n${command}`;
+            if (stepMatch) {
+                // Handle step delimiter
+                completeAndSendStep();
+                currentStepTitle = stepMatch[1] || 'Untitled Step';
+                currentStepLog += `$ ${command}\n--- STEP: ${currentStepTitle} ---\n`;
+            } else if (command.trim().startsWith('gcloud')) {
+                // Delegate to gcloud-runner
+                currentStepLog += `$ ${command}\n`; 
+                
+                // Prepend exports to the gcloud command to ensure env variables are available
+                const commandWithExports = `${variableExports}\n${command}`;
 
                 const runnerResponse = await fetch(GCLOUD_RUNNER_URL, {
                     method: 'POST',
@@ -109,6 +112,17 @@ export async function runExecutor(
                      const errorOutput = result.stderr || result.stdout || 'No output from runner.';
                      throw new Error(`Command failed with exit code ${result.returncode}:\n${errorOutput}`);
                 }
+            } else if (sleepMatch) {
+                // Handle sleep locally
+                const duration = parseInt(sleepMatch[1], 10);
+                currentStepLog += `$ ${command}\n`;
+                currentStepLog += `Sleeping for ${duration} seconds...\n`;
+                await new Promise(resolve => setTimeout(resolve, duration * 1000));
+                currentStepLog += `Sleep complete.\n`;
+            } else {
+                // Handle other commands (like simple echos) by just logging them
+                currentStepLog += `$ ${command}\n`;
+                // Non-executable commands are logged for transparency but produce no further output.
             }
         }
         
