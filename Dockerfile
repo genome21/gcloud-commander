@@ -1,38 +1,38 @@
-# Use the official Google Cloud SDK image as a base.
-# This guarantees gcloud is installed and in the PATH.
+# Use Google's official Cloud SDK image as the base.
+# This guarantees gcloud is installed and the PATH is set correctly.
 FROM google/cloud-sdk:latest
 
-# Install curl and build-essentials needed for nvm and some npm packages
-RUN apt-get update && apt-get install -y curl build-essential
-
-# Set up environment for nvm
-ENV NVM_DIR /usr/local/nvm
-# Use a specific LTS version of Node.js for stability
-ENV NODE_VERSION 20.11.1
-
-# Install nvm
-RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-
-# Activate nvm and install Node.js
-# The PATH is updated to include the nvm-installed node and npm binaries.
-ENV PATH $NVM_DIR/versions/node/v$NODE_VERSION/bin:$PATH
-RUN . $NVM_DIR/nvm.sh && nvm install $NODE_VERSION && nvm alias default $NODE_VERSION
-
-# Create app directory
+# Set the working directory
 WORKDIR /app
 
-# Copy package files
-COPY package.json ./
+# Install Node.js and npm using the recommended NodeSource repository
+RUN apt-get update -y && \
+    apt-get install -y curl gnupg && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs
 
-# Install app dependencies using the nvm-sourced Node.js
-RUN npm install
+# --- Verification Step ---
+# Verify that gcloud and node are installed and in the PATH.
+# If these commands fail, the build will fail.
+RUN gcloud --version
+RUN node --version
+RUN npm --version
 
-# Copy app source
+# Copy package.json and package-lock.json
+COPY package*.json ./
+
+# Install app dependencies
+RUN npm ci
+
+# Copy the rest of the application code
 COPY . .
 
-# Build the app using the nvm-sourced Node.js
+# Build the Next.js application
 RUN npm run build
 
-# Expose port and start app. Cloud Run provides the PORT env var.
-EXPOSE 9002
+# Expose the port the app will run on
+ENV PORT 8080
+EXPOSE 8080
+
+# Define the command to run the app
 CMD ["npm", "start"]
