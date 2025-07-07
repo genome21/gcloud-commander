@@ -450,8 +450,8 @@ export default function GCloudCommander() {
                 <Skeleton className="h-10 w-full" />
             </div>
         ) : scripts.length > 0 ? (
-            <div className="space-y-2">
-            <Label htmlFor="script-select">Select a script to run</Label>
+            <div className="rounded-lg border p-4 space-y-2">
+            <Label htmlFor="script-select" className="font-semibold">Select a script to run</Label>
             <Select
                 value={selectedScriptKey}
                 onValueChange={handleScriptChange}
