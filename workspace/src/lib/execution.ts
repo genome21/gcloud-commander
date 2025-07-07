@@ -6,7 +6,7 @@ export async function runExecutor(
     inputValues: Record<string, string>,
     controller: ReadableStreamDefaultController<any>
 ) {
-    console.log('--- GCloud Commander: Delegating Script Execution to gcloud-runner ---');
+    console.log('--- GCloud Commander: Orchestrating Script Execution via gcloud-runner ---');
     console.log('Input Values:', inputValues);
 
     const sendData = (data: object) => {
@@ -41,65 +41,86 @@ export async function runExecutor(
         .filter(line => !line.trim().startsWith('read -p'))
         .join('\n');
     
-    const executableScript = `${variableExports}\n\n${scriptBody}`;
+    const fullScriptPrefix = `${variableExports}\n`;
     
-    console.log('--- Executable Script to be sent to runner ---\n', executableScript);
+    // Parse script into executable commands, handling multi-line commands ending with '\'
+    const lines = scriptBody.split('\n');
+    const commands = [];
+    let currentCommand = '';
+
+    for (const line of lines) {
+        const trimmedLine = line.trim();
+        if (trimmedLine === '') continue;
+
+        currentCommand += trimmedLine;
+        if (trimmedLine.endsWith('\\')) {
+            currentCommand = currentCommand.slice(0, -1) + ' '; // remove trailing \ and add space for next line
+        } else {
+            commands.push(currentCommand);
+            currentCommand = '';
+        }
+    }
+    if (currentCommand) {
+        commands.push(currentCommand.trim());
+    }
+
+    let stepId = 0;
+    let currentStepTitle = 'Initializing Execution...';
+    let currentStepLog = '';
+
+    const completeAndSendStep = () => {
+        if (currentStepLog.trim() || currentStepTitle !== 'Initializing Execution...') {
+            sendData({ type: 'step', data: { id: stepId, title: currentStepTitle, log: currentStepLog.trim() } });
+            stepId++;
+            currentStepLog = ''; // Reset log for next step
+        }
+    };
 
     try {
-        const response = await fetch(GCLOUD_RUNNER_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ command: executableScript })
-        });
-
-        const fullLog = await response.text();
-
-        if (!response.ok) {
-            throw new Error(`gcloud-runner service failed with status ${response.status}: ${fullLog}`);
-        }
-
-        console.log('--- Full Log from gcloud-runner ---\n', fullLog);
-
-        // Parse the full output into steps based on the '---STEP:' delimiter
-        const lines = fullLog.split('\n');
-        const steps = [];
-        let currentStep = {
-            title: 'Initializing Execution...',
-            log: '',
-        };
-
-        for (const line of lines) {
-            if (line.startsWith('---STEP:')) {
-                // If the previous step has content, push it to the array.
-                if (currentStep.log.trim() || currentStep.title !== 'Initializing Execution...') {
-                     steps.push({ ...currentStep, log: currentStep.log.trim() });
-                }
-                const newTitle = line.replace('---STEP:', '').trim();
-                currentStep = {
-                    title: newTitle,
-                    log: '',
-                };
+        for (const command of commands) {
+            if (command.startsWith('echo "---STEP:')) {
+                completeAndSendStep();
+                const newTitle = command.match(/echo "---STEP:([^"]+)"/)?.[1];
+                currentStepTitle = newTitle || 'Untitled Step';
+                // Add a marker to the log for transparency
+                currentStepLog += `$ ${command}\n--- STEP: ${currentStepTitle} ---\n`;
             } else {
-                currentStep.log += line + '\n';
+                currentStepLog += `$ ${command}\n`; // Show the command being executed in the log
+
+                // Prepend exports to every command to ensure environment variables are available in the stateless runner
+                const commandWithExports = `${fullScriptPrefix}\n${command}`;
+
+                const runnerResponse = await fetch(GCLOUD_RUNNER_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command: commandWithExports })
+                });
+                
+                const result = await runnerResponse.json();
+
+                if (result.stdout) {
+                    currentStepLog += result.stdout + '\n';
+                }
+                if (result.stderr) {
+                    currentStepLog += `[STDERR] ${result.stderr}\n`;
+                }
+
+                if (!runnerResponse.ok || result.returncode !== 0) {
+                     const errorOutput = result.stderr || result.stdout || 'No output from runner.';
+                     throw new Error(`Command failed with exit code ${result.returncode}:\n${errorOutput}`);
+                }
             }
         }
-        // Add the last step to the array
-        if (currentStep.log.trim() || (steps.length === 0 && currentStep.title !== 'Initializing Execution...')) {
-            steps.push({ ...currentStep, log: currentStep.log.trim() });
-        }
-
-        // Stream the parsed steps back to the client to maintain the UI experience
-        for (let i = 0; i < steps.length; i++) {
-            const step = steps[i];
-            sendData({ type: 'step', data: { id: i, title: step.title, log: step.log } });
-        }
-
+        
+        completeAndSendStep(); // Send the last step
         sendData({ type: 'end' });
 
     } catch (error) {
-        console.error('--- GCloud Commander: Error calling gcloud-runner ---', error);
+        console.error('--- GCloud Commander: Error during script orchestration ---', error);
         const message = error instanceof Error ? error.message : 'An unknown error occurred';
-        sendData({ type: 'error', data: { message } });
+        currentStepLog += `\n--- EXECUTION FAILED ---\n${message}\n`;
+        completeAndSendStep();
+        sendData({ type: 'error', data: { message: `Execution failed at step: "${currentStepTitle}"` } });
     } finally {
         closeController();
     }
