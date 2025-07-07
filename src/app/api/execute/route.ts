@@ -13,8 +13,8 @@ export async function POST(request: NextRequest) {
     }
 
     const stream = new ReadableStream({
-      start(controller) {
-        runExecutor(scriptContent, inputValues || {}, controller);
+      async start(controller) {
+        await runExecutor(scriptContent, inputValues || {}, controller);
       },
     });
 
