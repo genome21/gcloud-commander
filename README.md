@@ -153,4 +153,4 @@ See [LICENSE](./LICENSE) for full terms of use and restrictions.
 
 [<img src="./src/assets/LI-Logo.png" alt="LinkedIn" style="width:200px;"/>](https://www.linkedin.com/in/robertwilkinsiii/)
 &nbsp;
-[<img src="./src/assets/GitHub_Logo.png" alt="GitHub" style="width:200px;"/>](https://github.com/genome21)
+[<img src="./src/assets/GitHub_Logo_WhiteBG.png" alt="GitHub" style="width:200px;"/>](https://github.com/genome21)
