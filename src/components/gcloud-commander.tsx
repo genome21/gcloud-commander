@@ -36,6 +36,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { ScriptFlowDiagram } from './script-flow-diagram';
 
 interface ScriptParameter {
   name: string; // e.g., GCLOUD_PROJECT or zone
@@ -1081,7 +1082,7 @@ function MachineTypeDialog({
 function ScriptPreviewDialog({
   open,
   onOpenChange,
-  scriptContent
+  scriptContent,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -1089,17 +1090,30 @@ function ScriptPreviewDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Script Execution Preview</DialogTitle>
           <DialogDescription>
-            This is the script that will be executed, with all variables and parameters substituted.
+            Preview the script that will be executed, either as raw text or a visual flow.
           </DialogDescription>
         </DialogHeader>
-        <div className="my-4">
-          <pre className="text-xs p-4 bg-muted rounded-md whitespace-pre-wrap font-mono text-muted-foreground max-h-[50vh] overflow-auto">
-            <code>{scriptContent}</code>
-          </pre>
+        <div className="flex-grow my-4 overflow-hidden">
+           <Tabs defaultValue="visual" className="h-full flex flex-col">
+              <TabsList>
+                <TabsTrigger value="visual">Visual Flow</TabsTrigger>
+                <TabsTrigger value="text">Text Preview</TabsTrigger>
+              </TabsList>
+              <TabsContent value="visual" className="flex-grow mt-4">
+                <ScriptFlowDiagram scriptContent={scriptContent} />
+              </TabsContent>
+              <TabsContent value="text" className="flex-grow relative mt-4">
+                <ScrollArea className="absolute inset-0">
+                    <pre className="text-xs p-4 bg-muted rounded-md whitespace-pre-wrap font-mono text-muted-foreground">
+                        <code>{scriptContent}</code>
+                    </pre>
+                </ScrollArea>
+              </TabsContent>
+            </Tabs>
         </div>
         <DialogFooter>
           <DialogClose asChild>
