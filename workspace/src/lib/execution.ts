@@ -30,10 +30,6 @@ export async function runExecutor(
     };
 
     // 1. Prepare the script
-    const variableExports = Object.entries(inputValues)
-        .map(([key, value]) => `export ${key}='${value.replace(/'/g, "'\\''")}'`)
-        .join('\n');
-    
     const scriptBody = scriptContent
         .split('\n')
         .filter(line => 
@@ -87,16 +83,20 @@ export async function runExecutor(
                 currentStepTitle = stepMatch[1] || 'Untitled Step';
                 currentStepLog += `$ ${command}\n--- STEP: ${currentStepTitle} ---\n`;
             } else if (command.trim().startsWith('gcloud')) {
-                // Delegate to gcloud-runner
-                currentStepLog += `$ ${command}\n`; 
+                // Delegate to gcloud-runner, substituting variables first.
                 
-                // Prepend exports to the gcloud command to ensure env variables are available
-                const commandWithExports = `${variableExports}\n${command}`;
+                let hydratedCommand = command;
+                for (const [key, value] of Object.entries(inputValues)) {
+                    const regex = new RegExp(`\\$${key}|\\$\\{${key}\\}`, 'g');
+                    hydratedCommand = hydratedCommand.replace(regex, value);
+                }
+                
+                currentStepLog += `$ ${hydratedCommand}\n`; 
 
                 const runnerResponse = await fetch(GCLOUD_RUNNER_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ command: commandWithExports })
+                    body: JSON.stringify({ command: hydratedCommand })
                 });
                 
                 const result = await runnerResponse.json();
