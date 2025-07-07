@@ -1,39 +1,36 @@
-# Use the official Google Cloud CLI slim image as a base
-FROM google/cloud-sdk:slim
+# Use the official Node.js 20 image as a base, as it's a standard for Node apps.
+FROM node:20-slim
 
-# Set the PATH to include the Google Cloud SDK. This is crucial.
-ENV PATH /google-cloud-sdk/bin:$PATH
-
-# Install dependencies for adding NodeSource repository
-RUN apt-get update && apt-get install -y curl gnupg
-
-# Add the NodeSource repository for Node.js 20.x
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-
-# Install Node.js
-RUN apt-get install -y nodejs
-
-# Verify installations
-RUN node -v
-RUN npm -v
-RUN gcloud --version
-
-# Set the working directory
+# Set the working directory inside the container.
 WORKDIR /app
 
-# Copy package files and install dependencies
-# This is optimized for Docker layer caching
-COPY package*.json ./
+# Install dependencies needed to add the gcloud repository.
+RUN apt-get update && apt-get install -y apt-transport-https ca-certificates gnupg curl
+
+# Install the Google Cloud SDK using the recommended, non-deprecated method.
+RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee /etc/apt/sources.list.d/google-cloud-sdk.list
+RUN curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
+RUN apt-get update && apt-get install -y google-cloud-sdk
+
+# The gcloud SDK is installed in /usr/lib/google-cloud-sdk. Add it to the system's PATH.
+# This is the crucial step that makes the `gcloud` command available everywhere.
+ENV PATH="/usr/lib/google-cloud-sdk/bin:${PATH}"
+
+# Copy package.json to leverage Docker layer caching.
+COPY package.json ./
+
+# Install application dependencies.
 RUN npm install
 
-# Copy the rest of the application code
+# Copy the rest of the application's source code.
 COPY . .
 
-# Build the Next.js app
+# Build the Next.js application for production.
 RUN npm run build
 
-# Expose the port the app runs on (App Hosting will map this)
+# The PORT environment variable is automatically set by Cloud Run.
+# `npm start` (which runs `next start`) will use it. We expose 8080 as a standard.
 EXPOSE 8080
 
-# Start the app. App Hosting uses the start script from package.json.
+# The command to start the application. Cloud Run will use this.
 CMD ["npm", "start"]
