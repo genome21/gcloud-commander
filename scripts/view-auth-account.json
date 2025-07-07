@@ -1,0 +1,5 @@
+{
+  "name": "View Authenticated Account",
+  "description": "Displays the Google Cloud account currently authenticated with gcloud.",
+  "script": "view-auth-account.sh"
+}
