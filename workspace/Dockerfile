@@ -1,32 +1,32 @@
-# Use the official Google Cloud CLI image as the base
-FROM google/google-cloud-cli:latest
+# Use the official Google Cloud SDK image as the base.
+# This guarantees that gcloud is installed.
+FROM google/cloud-sdk:latest
 
-# Add the Google Cloud SDK to the PATH
-ENV PATH="/google-cloud-sdk/bin:${PATH}"
+# Add the gcloud SDK to the system's PATH environment variable.
+# This is the crucial step to make `gcloud` accessible to all processes.
+ENV PATH /google-cloud-sdk/bin:$PATH
 
-# Set the working directory
+# Install Node.js and npm, which are required to run the Next.js application.
+RUN apt-get update && \
+    apt-get install -y nodejs npm && \
+    # Clean up the apt cache to reduce the final image size.
+    rm -rf /var/lib/apt/lists/*
+
+# Set the working directory for the application.
 WORKDIR /app
 
-# Install Node.js and npm
-# We need to add the nodejs repository to get a recent version
-RUN apt-get update && \
-    apt-get install -y ca-certificates curl gnupg && \
-    mkdir -p /etc/apt/keyrings && \
-    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
-    NODE_MAJOR=20 && \
-    echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list && \
-    apt-get update && \
-    apt-get install -y nodejs && \
-    npm install -g npm@latest
+# Copy package files and install dependencies.
+# This is done in a separate step to leverage Docker's layer caching.
+COPY package*.json ./
+RUN npm install
 
-# Copy application dependency manifests to the container image
-COPY package.json package-lock.json* ./
-
-# Install dependencies
-RUN npm install --production
-
-# Copy local code to the container image
+# Copy the rest of the application source code.
 COPY . .
 
-# Set the command to run when the container starts
+# Build the Next.js application for production.
+RUN npm run build
+
+# Set the command to start the application.
+# Firebase App Hosting automatically sets the PORT environment variable,
+# which `next start` will use.
 CMD ["npm", "start"]
