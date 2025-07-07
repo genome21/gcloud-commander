@@ -63,6 +63,13 @@ export interface ProjectInfo {
     networks: NetworkInfo[];
 }
 
+export interface MachineTypeInfo {
+    name: string;
+    description: string;
+    guestCpus: number;
+    memoryMb: number;
+}
+
 export async function getProjectInfo(projectId: string): Promise<ProjectInfo> {
     if (!projectId || projectId.trim() === '') {
         throw new Error("Project ID is required.");
@@ -105,6 +112,26 @@ export async function getProjectInfo(projectId: string): Promise<ProjectInfo> {
     networks.forEach(n => n.subnetworks.sort((a,b) => a.name.localeCompare(b.name)));
 
     return { regions, networks };
+}
+
+export async function getMachineTypes(projectId: string, zone: string): Promise<MachineTypeInfo[]> {
+    if (!projectId || !zone) {
+        throw new Error("Project ID and Zone are required to fetch machine types.");
+    }
+    const command = `gcloud compute machine-types list --project=${projectId} --zones=${zone} --format="json(name,description,guestCpus,memoryMb)"`;
+    const machineTypesData = await runGcloudCommand(command);
+
+    const flatData: MachineTypeInfo[] = Array.isArray(machineTypesData) ? machineTypesData.flat() : [];
+
+    return flatData.sort((a, b) => {
+        if (a.guestCpus !== b.guestCpus) {
+            return a.guestCpus - b.guestCpus;
+        }
+        if (a.memoryMb !== b.memoryMb) {
+            return a.memoryMb - b.memoryMb;
+        }
+        return a.name.localeCompare(b.name);
+    });
 }
 
 

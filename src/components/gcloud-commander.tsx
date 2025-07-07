@@ -16,8 +16,9 @@ import {
   FileText,
   Network,
   Info,
+  Cpu,
 } from 'lucide-react';
-import { getSummaryForScriptLog, getScripts, saveScript, deleteScript, getProjectInfo, type Script, type ProjectInfo } from '@/app/actions';
+import { getSummaryForScriptLog, getScripts, saveScript, deleteScript, getProjectInfo, getMachineTypes, type Script, type ProjectInfo, type MachineTypeInfo } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -124,6 +125,11 @@ export default function GCloudCommander() {
   const [projectInfo, setProjectInfo] = useState<ProjectInfo | null>(null);
   const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
   const [isFetchingInfo, setIsFetchingInfo] = useState(false);
+  
+  // State for Machine Types Dialog
+  const [machineTypes, setMachineTypes] = useState<MachineTypeInfo[]>([]);
+  const [isMachineTypeDialogOpen, setIsMachineTypeDialogOpen] = useState(false);
+  const [isFetchingMachineTypes, setIsFetchingMachineTypes] = useState(false);
 
   const selectedScript = useMemo(() => {
     return scripts.find(s => s.key === selectedScriptKey);
@@ -204,9 +210,34 @@ export default function GCloudCommander() {
       setIsFetchingInfo(false);
     }
   };
+  
+  const handleFetchMachineTypes = async () => {
+    const projectId = inputValues['GCLOUD_PROJECT'] || inputValues['project'];
+    const zoneParam = parameters.find(p => p.name.toLowerCase().includes('zone'));
+    const zone = zoneParam ? inputValues[zoneParam.name] : '';
+
+    if (!projectId || !zone) {
+      toast({ variant: 'destructive', title: 'Missing Info', description: 'Please provide both a Project ID and a Zone to fetch machine types.' });
+      return;
+    }
+
+    setIsFetchingMachineTypes(true);
+    setIsMachineTypeDialogOpen(true);
+    setMachineTypes([]);
+
+    try {
+      const types = await getMachineTypes(projectId, zone);
+      setMachineTypes(types);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'An unknown error occurred.';
+      toast({ variant: 'destructive', title: 'Error Fetching Machine Types', description: message });
+      setIsMachineTypeDialogOpen(false);
+    } finally {
+      setIsFetchingMachineTypes(false);
+    }
+  };
 
   const handleInfoSelect = (type: 'region' | 'zone' | 'network' | 'subnet', value: string) => {
-    // Find a parameter that matches the type. e.g. type 'zone' matches param name 'zone' or 'ZONE'
     const targetParam = parameters.find(p => p.name.toLowerCase().includes(type));
     
     if (targetParam) {
@@ -215,13 +246,25 @@ export default function GCloudCommander() {
             title: `Input Updated`,
             description: `${targetParam.label} has been set to "${value}".`
         });
-        setIsInfoDialogOpen(false); // Close dialog on selection
+        setIsInfoDialogOpen(false);
     } else {
         toast({
             variant: 'destructive',
             title: 'No Matching Input',
             description: `Your script does not seem to have an input field for a ${type}.`
         });
+    }
+  };
+
+  const handleMachineTypeSelect = (machineTypeName: string) => {
+    const targetParam = parameters.find(p => p.name.toLowerCase().includes('machine-type'));
+    if (targetParam) {
+        handleInputChange(targetParam.name, machineTypeName);
+        toast({
+            title: `Input Updated`,
+            description: `${targetParam.label} has been set to "${machineTypeName}".`
+        });
+        setIsMachineTypeDialogOpen(false);
     }
   };
 
@@ -232,7 +275,6 @@ export default function GCloudCommander() {
     setSteps([]);
     setExpandedLogs(new Set());
 
-    // Separate variables from flags based on the parsed parameters
     const variables: Record<string, string> = {};
     const detectedFlags: Record<string, string> = {};
 
@@ -273,7 +315,7 @@ export default function GCloudCommander() {
   
         buffer += value;
         const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // Keep the last, possibly incomplete, line
+        buffer = lines.pop() || '';
   
         for (const line of lines) {
           if (line.trim() === '') continue;
@@ -312,10 +354,10 @@ export default function GCloudCommander() {
               description: data.message,
             });
             setIsExecuting(false);
-            return; // Stop processing
+            return;
           } else if (type === 'end') {
             setIsExecuting(false);
-            return; // Stop processing
+            return;
           }
         }
       }
@@ -375,6 +417,10 @@ export default function GCloudCommander() {
   
   const readPParams = useMemo(() => parameters.filter(p => p.from === 'readp'), [parameters]);
   const flagParams = useMemo(() => parameters.filter(p => p.from === 'flag'), [parameters]);
+  
+  const zoneParamName = useMemo(() => parameters.find(p => p.name.toLowerCase().includes('zone'))?.name, [parameters]);
+  const zoneValue = zoneParamName ? inputValues[zoneParamName] : undefined;
+
 
   return (
     <>
@@ -437,21 +483,26 @@ export default function GCloudCommander() {
             <div className="space-y-6">
                 {readPParams.length > 0 && (
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {readPParams.map((param) => <ParameterInput key={param.name} parameter={param} value={inputValues[param.name]} onValueChange={handleInputChange} onFetchInfo={handleFetchProjectInfo} isExecuting={isExecuting} projectId={inputValues['GCLOUD_PROJECT']} />)}
+                        {readPParams.map((param) => <ParameterInput key={param.name} parameter={param} value={inputValues[param.name]} onValueChange={handleInputChange} onFetchInfo={handleFetchProjectInfo} onFetchMachineTypes={handleFetchMachineTypes} isExecuting={isExecuting} projectId={inputValues['GCLOUD_PROJECT']} zone={zoneValue} />)}
                     </div>
                 )}
                
                 {flagParams.length > 0 && (
-                    <div>
-                         <div className="flex items-center gap-2 mb-4">
-                             <Info className="h-4 w-4 text-muted-foreground" />
-                             <h3 className="text-sm font-medium text-muted-foreground">Detected Parameters</h3>
-                             <Separator className="flex-1" />
-                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {flagParams.map((param) => <ParameterInput key={param.name} parameter={param} value={inputValues[param.name]} onValueChange={handleInputChange} onFetchInfo={handleFetchProjectInfo} isExecuting={isExecuting} projectId={inputValues['GCLOUD_PROJECT']} />)}
-                        </div>
-                    </div>
+                     <Accordion type="single" collapsible className="w-full" defaultValue="item-1">
+                        <AccordionItem value="item-1">
+                            <AccordionTrigger className="hover:no-underline">
+                                 <div className="flex items-center gap-2">
+                                     <Info className="h-4 w-4 text-muted-foreground" />
+                                     <h3 className="text-sm font-medium text-muted-foreground">Detected Parameters</h3>
+                                 </div>
+                            </AccordionTrigger>
+                            <AccordionContent>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t mt-4">
+                                    {flagParams.map((param) => <ParameterInput key={param.name} parameter={param} value={inputValues[param.name]} onValueChange={handleInputChange} onFetchInfo={handleFetchProjectInfo} onFetchMachineTypes={handleFetchMachineTypes} isExecuting={isExecuting} projectId={inputValues['GCLOUD_PROJECT']} zone={zoneValue} />)}
+                                </div>
+                            </AccordionContent>
+                        </AccordionItem>
+                    </Accordion>
                 )}
             </div>
         )}
@@ -557,21 +608,31 @@ export default function GCloudCommander() {
       info={projectInfo}
       onSelect={handleInfoSelect}
     />
+    <MachineTypeDialog
+        open={isMachineTypeDialogOpen}
+        onOpenChange={setIsMachineTypeDialogOpen}
+        isLoading={isFetchingMachineTypes}
+        machineTypes={machineTypes}
+        onSelect={handleMachineTypeSelect}
+    />
     </>
   );
 }
 
-function ParameterInput({ parameter, value, onValueChange, onFetchInfo, isExecuting, projectId }: {
+function ParameterInput({ parameter, value, onValueChange, onFetchInfo, onFetchMachineTypes, isExecuting, projectId, zone }: {
   parameter: ScriptParameter;
   value: string;
   onValueChange: (name: string, value: string) => void;
   onFetchInfo: () => void;
+  onFetchMachineTypes: () => void;
   isExecuting: boolean;
   projectId?: string;
+  zone?: string;
 }) {
     const isProjectInfoField = ['zone', 'region', 'network', 'subnet', 'project'].some(keyword =>
         parameter.name.toLowerCase().includes(keyword)
     );
+    const isMachineTypeField = parameter.name.toLowerCase().includes('machine-type');
 
     return (
         <div key={parameter.name} className="space-y-2">
@@ -602,6 +663,27 @@ function ParameterInput({ parameter, value, onValueChange, onFetchInfo, isExecut
                 </TooltipTrigger>
                 <TooltipContent>
                     <p>Fetch Project Infrastructure Info</p>
+                </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+            )}
+            {isMachineTypeField && (
+              <TooltipProvider>
+                <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={onFetchMachineTypes}
+                    disabled={isExecuting || !projectId || !zone}
+                    className="shrink-0"
+                    >
+                    <Cpu className="h-4 w-4" />
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                    <p>Fetch available machine types for the selected zone</p>
                 </TooltipContent>
                 </Tooltip>
             </TooltipProvider>
@@ -877,6 +959,60 @@ function ProjectInfoDialog({
               </ScrollArea>
             </Tabs>
           )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function MachineTypeDialog({
+  open,
+  onOpenChange,
+  machineTypes,
+  isLoading,
+  onSelect,
+}: {
+  open: boolean,
+  onOpenChange: (open: boolean) => void,
+  machineTypes: MachineTypeInfo[],
+  isLoading: boolean,
+  onSelect: (name: string) => void,
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl h-[70vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Available Machine Types</DialogTitle>
+          <DialogDescription>
+            Select a machine type to populate the input field. Types are specific to the selected zone.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex-grow overflow-hidden relative">
+          <ScrollArea className="h-full pr-4">
+            {isLoading ? (
+              <div className="space-y-2">
+                {[...Array(10)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+              </div>
+            ) : (
+                <div className="flex flex-col gap-2">
+                    {machineTypes.map(type => (
+                        <Button
+                            key={type.name}
+                            variant="outline"
+                            onClick={() => onSelect(type.name)}
+                            className="h-auto text-left justify-start"
+                        >
+                            <div className="flex flex-col items-start">
+                                <p className="font-medium text-sm text-foreground">{type.name}</p>
+                                <p className="text-sm text-muted-foreground">
+                                    {type.guestCpus} vCPUs, {type.memoryMb / 1024} GB RAM - {type.description}
+                                </p>
+                            </div>
+                        </Button>
+                    ))}
+                </div>
+            )}
+          </ScrollArea>
         </div>
       </DialogContent>
     </Dialog>
