@@ -1,34 +1,46 @@
-# Use the official Node.js 20 image as a parent image
-FROM node:20-slim
+# Use Google's official slim Cloud SDK image as a base.
+# This guarantees gcloud is installed and available.
+FROM google/cloud-sdk:slim
 
-# Set the working directory in the container
+# Set the working directory inside the container
 WORKDIR /app
 
-# Install system dependencies required for Google Cloud SDK
-RUN apt-get update && apt-get install -y apt-transport-https ca-certificates gnupg curl
+# Install Node.js v20 using the official NodeSource repository.
+# This is the recommended way to install Node.js on Debian-based systems like this one.
+RUN apt-get update && \
+    apt-get install -y ca-certificates curl gnupg && \
+    mkdir -p /etc/apt/keyrings && \
+    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
+    echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list && \
+    apt-get update && \
+    apt-get install -y nodejs && \
+    # Clean up apt caches to keep the image size down
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Add the Google Cloud SDK repository using the recommended gpg method
-RUN curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
-RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee /etc/apt/sources.list.d/google-cloud-sdk.list
+# Verify installations
+RUN node -v
+RUN npm -v
+RUN gcloud --version
 
-# Install the Google Cloud SDK
-RUN apt-get update && apt-get install -y google-cloud-sdk
-
-# Copy package.json and package-lock.json (if available)
+# Copy package configuration files
 COPY package*.json ./
 
-# Install app dependencies, including dev dependencies needed for the build
-RUN npm install --production=false
+# Install project dependencies
+RUN npm install
 
-# Copy the rest of the application's code
+# Copy the rest of the application's source code
 COPY . .
 
-# Build the Next.js application
+# Build the Next.js application for production
 RUN npm run build
 
-# Expose the port the app runs on
-ENV PORT 9002
+# Expose the port the app will run on. Cloud Run provides the PORT env var.
 EXPOSE 9002
 
-# Start the app
-CMD ["npm", "start", "-p", "9002"]
+# Set the user to a non-root user for better security.
+# The nodejs package creates a 'node' user.
+USER node
+
+# The command to start the application.
+# It will use the PORT environment variable provided by Cloud Run.
+CMD ["npm", "run", "start"]
