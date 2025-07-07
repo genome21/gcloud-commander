@@ -1,6 +1,8 @@
+![Gcloud Commander Logo](src/assets/gcloud-commander-logo.png)
+
 # GCloud Commander 🚀
 
-**The Definitive Frontend for Enterprise Cloud Orchestration**
+> **The Definitive Frontend for Enterprise Cloud Orchestration**
 
 GCloud Commander is a premier, enterprise-grade web interface that transforms complex `gcloud` and shell scripts into secure, visible, and intelligent workflows. Valued by elite DevOps and SRE teams, it provides a human-friendly command center for your powerful `gcloud-runner` microservice, turning raw command-line operations into auditable, step-by-step processes with AI-powered insights.
 
