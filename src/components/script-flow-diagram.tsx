@@ -6,10 +6,6 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Workflow } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
-
-import 'reactflow/dist/style.css';
-
-
 const CustomNode = ({ data }: { data: { label: string, commands?: string } }) => {
     return (
         <Card className="shadow-md" style={{width: 250}}>
