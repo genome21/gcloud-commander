@@ -1,11 +1,13 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useEffect } from 'react';
 import {
   ReactFlow,
   Background,
   Controls,
   MiniMap,
+  useNodesState,
+  useEdgesState,
   type Node,
   type Edge,
   MarkerType,
@@ -51,7 +53,6 @@ const parseScriptToFlow = (scriptContent: string): { nodes: Node[], edges: Edge[
     const xPos = 50;
     let yPos = 0;
     
-    // Explicitly define edge styles to avoid CSS conflicts
     const primaryColor = '#9D4EDD';
     const edgeType = 'smoothstep';
     const markerEnd = { type: MarkerType.ArrowClosed, color: primaryColor };
@@ -60,19 +61,15 @@ const parseScriptToFlow = (scriptContent: string): { nodes: Node[], edges: Edge[
         strokeWidth: 2,
     };
 
-    // 1. Add Start Node
     nodes.push({ id: 'start', type: 'input', data: { label: 'Start Execution' }, position: { x: xPos + (nodeWidth / 4), y: yPos } });
     let previousNodeId = 'start';
     yPos += 100;
 
-    // 2. Split script into chunks by the step delimiter
     const stepDelimiterRegex = /(?=echo "---STEP:[^"]+")/g;
     const scriptWithoutShebang = scriptContent.replace(/^#![^\n]*\n/, '').trim();
-    const chunks = scriptWithoutShebang.split(stepDelimiterRegex).filter(s => s.trim());
+    const chunks = scriptWithoutShebang ? scriptWithoutShebang.split(stepDelimiterRegex).filter(s => s.trim()) : [];
 
-    // 3. Process chunks into nodes and edges
     if (chunks.length === 0 && scriptWithoutShebang.length > 0) {
-        // Case: Script has content but no ---STEP delimiters
         const commands = scriptWithoutShebang.trim();
         const nodeId = 'step-0';
         const nodeHeight = Math.min((commands.split('\n').length * 15) + 100, 250);
@@ -86,21 +83,29 @@ const parseScriptToFlow = (scriptContent: string): { nodes: Node[], edges: Edge[
         previousNodeId = nodeId;
 
     } else {
-        // Case: Script has steps
-        chunks.forEach((chunk, index) => {
-            let title: string;
-            let commands: string;
-            
-            const titleMatch = chunk.match(/echo "---STEP:([^"]+)"/);
+        let firstChunkIsStep = chunks.length > 0 && chunks[0].startsWith('echo "---STEP:');
+        let initialCommands = firstChunkIsStep ? '' : (chunks.length > 0 ? chunks.shift() : '');
 
-            if (titleMatch) {
-                title = titleMatch[1].trim();
-                const lines = chunk.split('\n').slice(1);
-                commands = lines.join('\n').trim();
-            } else {
-                title = 'Initial Commands';
-                commands = chunk.trim();
-            }
+        if (initialCommands && initialCommands.trim()) {
+            const nodeId = 'initial-commands';
+            const nodeHeight = Math.min((initialCommands.split('\n').length * 15) + 100, 250);
+             nodes.push({
+                id: nodeId,
+                type: 'custom',
+                position: { x: xPos, y: yPos },
+                data: { label: 'Initial Commands', commands: initialCommands.trim() },
+            });
+            yPos += nodeHeight + 50;
+            edges.push({ id: `e-start-${nodeId}`, source: 'start', target: nodeId, type: edgeType, markerEnd, style: edgeStyle });
+            previousNodeId = nodeId;
+        }
+
+        chunks.forEach((chunk, index) => {
+            const titleMatch = chunk.match(/echo "---STEP:([^"]+)"/);
+            const title = titleMatch ? titleMatch[1].trim() : `Step ${index + 1}`;
+            
+            const lines = chunk.split('\n').slice(1);
+            const commands = lines.join('\n').trim();
             
             const nodeId = `step-${index}`;
             const nodeHeight = Math.min((commands.split('\n').length * 15) + 100, 250);
@@ -118,7 +123,6 @@ const parseScriptToFlow = (scriptContent: string): { nodes: Node[], edges: Edge[
         });
     }
 
-    // 4. Add End Node if there were any steps
     if (nodes.length > 1) {
         yPos += 25;
         nodes.push({ id: 'end', type: 'output', data: { label: 'End Execution' }, position: { x: xPos + (nodeWidth / 4), y: yPos } });
@@ -129,7 +133,15 @@ const parseScriptToFlow = (scriptContent: string): { nodes: Node[], edges: Edge[
 };
 
 export function ScriptFlowDiagram({ scriptContent }: { scriptContent: string }) {
-    const { nodes, edges } = useMemo(() => parseScriptToFlow(scriptContent), [scriptContent]);
+    const [nodes, setNodes, onNodesChange] = useNodesState([]);
+    const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+
+    useEffect(() => {
+        const { nodes: initialNodes, edges: initialEdges } = parseScriptToFlow(scriptContent);
+        setNodes(initialNodes);
+        setEdges(initialEdges);
+    }, [scriptContent, setNodes, setEdges]);
+
 
     if(nodes.length === 0) {
         return (
@@ -144,6 +156,8 @@ export function ScriptFlowDiagram({ scriptContent }: { scriptContent: string }) 
             <ReactFlow
                 nodes={nodes}
                 edges={edges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
                 nodeTypes={nodeTypes}
                 fitView
                 nodesDraggable={false}
