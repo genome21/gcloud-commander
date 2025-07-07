@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { ReactFlow, Background, Controls, MiniMap, type Node, type Edge } from '@xyflow/react';
+import { ReactFlow, Background, Controls, MiniMap, type Node, type Edge, MarkerType } from '@xyflow/react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Workflow } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -42,8 +42,8 @@ const parseScriptToFlow = (scriptContent: string): { nodes: Node[], edges: Edge[
     const nodeWidth = 250;
     const xPos = 50;
     let yPos = 0;
-    const edgeStyle = { strokeWidth: 2, stroke: 'hsl(var(--primary))' };
     const edgeType = 'smoothstep';
+    const markerEnd = { type: MarkerType.ArrowClosed };
 
     // 1. Add Start Node
     nodes.push({ id: 'start', type: 'input', data: { label: 'Start Execution' }, position: { x: xPos + (nodeWidth / 4), y: yPos } });
@@ -67,7 +67,7 @@ const parseScriptToFlow = (scriptContent: string): { nodes: Node[], edges: Edge[
             data: { label: 'Script Commands', commands: commands },
         });
         yPos += nodeHeight + 50;
-        edges.push({ id: `e-start-${nodeId}`, source: 'start', target: nodeId, animated: true, type: edgeType, style: edgeStyle });
+        edges.push({ id: `e-start-${nodeId}`, source: 'start', target: nodeId, type: edgeType, markerEnd });
         previousNodeId = nodeId;
 
     } else {
@@ -98,7 +98,7 @@ const parseScriptToFlow = (scriptContent: string): { nodes: Node[], edges: Edge[
             });
             
             yPos += nodeHeight + 50;
-            edges.push({ id: `e-${previousNodeId}-${nodeId}`, source: previousNodeId, target: nodeId, animated: true, type: edgeType, style: edgeStyle });
+            edges.push({ id: `e-${previousNodeId}-${nodeId}`, source: previousNodeId, target: nodeId, type: edgeType, markerEnd });
             previousNodeId = nodeId;
         });
     }
@@ -107,7 +107,7 @@ const parseScriptToFlow = (scriptContent: string): { nodes: Node[], edges: Edge[
     if (nodes.length > 1) {
         yPos += 25;
         nodes.push({ id: 'end', type: 'output', data: { label: 'End Execution' }, position: { x: xPos + (nodeWidth / 4), y: yPos } });
-        edges.push({ id: `e-${previousNodeId}-end`, source: previousNodeId, target: 'end', type: edgeType, style: edgeStyle });
+        edges.push({ id: `e-${previousNodeId}-end`, source: previousNodeId, target: 'end', type: edgeType, markerEnd });
     }
 
     return { nodes, edges };
