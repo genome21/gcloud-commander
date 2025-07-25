@@ -2,10 +2,11 @@ import gradio as gr
 import os
 import subprocess
 
-def get_scripts():
+def get_scripts(os_type):
     scripts = []
+    extension = ".sh" if os_type == "Linux/Bash" else ".bat"
     for filename in os.listdir("scripts"):
-        if filename.endswith(".sh") or filename.endswith(".bat"):
+        if filename.endswith(extension):
             scripts.append(filename)
     return scripts
 
@@ -74,12 +75,12 @@ def execute_script(script_name, *args):
     return stdout.decode("utf-8"), stderr.decode("utf-8")
 
 def create_interface():
-    scripts = get_scripts()
-
     with gr.Blocks() as iface:
         gr.Markdown("# GCloud Commander")
 
-        script_dropdown = gr.Dropdown(scripts, label="Select a script")
+        os_switch = gr.Radio(["Linux/Bash", "Windows/Batch"], label="Operating System", value="Linux/Bash")
+
+        script_dropdown = gr.Dropdown(label="Select a script")
 
         parameter_inputs = []
 
@@ -89,6 +90,16 @@ def create_interface():
         stderr_output = gr.Textbox(label="Standard Error")
 
         parameter_outputs = [gr.Textbox(visible=False) for _ in range(10)]
+
+        def on_os_change(os_type):
+            scripts = get_scripts(os_type)
+            return gr.Dropdown.update(choices=scripts)
+
+        os_switch.change(
+            on_os_change,
+            inputs=[os_switch],
+            outputs=[script_dropdown]
+        )
 
         def on_script_change(script_name):
             if not script_name:
@@ -111,6 +122,8 @@ def create_interface():
             inputs=[script_dropdown],
             outputs=[*parameter_outputs, execute_button]
         )
+
+        iface.load(lambda: gr.Dropdown.update(choices=get_scripts("Linux/Bash")), None, script_dropdown)
 
         execute_button.click(
             execute_script,
