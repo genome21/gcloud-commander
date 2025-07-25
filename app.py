@@ -9,15 +9,24 @@ def get_scripts():
             scripts.append(filename)
     return scripts
 
+import re
+
 def get_script_parameters(script_name):
     parameters = []
     with open(os.path.join("scripts", script_name), "r") as f:
-        for line in f:
-            if line.startswith("read -p"):
-                parts = line.split(" ")
-                label = parts[2].strip('"')
-                name = parts[3].strip()
-                parameters.append({"name": name, "label": label})
+        content = f.read()
+
+        # Parse parameters from read -p commands
+        read_p_params = re.findall(r'read -p "([^"]+)" ([A-Z_0-9]+)', content)
+        for param in read_p_params:
+            parameters.append({"label": param[0], "name": param[1], "value": ""})
+
+        # Parse parameters from gcloud commands
+        gcloud_params = re.findall(r'--([a-zA-Z0-9_-]+)=?([^\s]+)', content)
+        for param in gcloud_params:
+            if not any(p["name"] == param[0] for p in parameters):
+                parameters.append({"label": param[0], "name": param[0], "value": param[1]})
+
     return parameters
 
 def execute_script(script_name, *args):
@@ -41,44 +50,42 @@ def create_interface():
     with gr.Blocks() as iface:
         gr.Markdown("# GCloud Commander")
 
-        with gr.Row():
-            script_dropdown = gr.Dropdown(scripts, label="Select a script")
+        script_dropdown = gr.Dropdown(scripts, label="Select a script")
 
-        with gr.Column(visible=False) as parameter_column:
-            parameter_inputs = []
+        parameter_inputs = []
 
-        execute_button = gr.Button("Execute Script", visible=False)
+        execute_button = gr.Button("Execute Script")
 
-        with gr.Row(visible=False) as output_row:
-            stdout_output = gr.Textbox(label="Standard Output")
-            stderr_output = gr.Textbox(label="Standard Error")
+        stdout_output = gr.Textbox(label="Standard Output")
+        stderr_output = gr.Textbox(label="Standard Error")
+
+        parameter_outputs = [gr.Textbox(visible=False) for _ in range(10)]
 
         def on_script_change(script_name):
+            if not script_name:
+                return [gr.update(visible=False) for _ in range(10)] + [gr.Button.update(visible=False)]
+
             parameters = get_script_parameters(script_name)
-            parameter_inputs.clear()
 
             new_inputs = []
             for param in parameters:
-                new_inputs.append(gr.Textbox(label=param["label"]))
+                new_inputs.append(gr.Textbox(label=param["label"], value=param["value"], visible=True))
 
-            parameter_inputs.extend(new_inputs)
+            # Pad with hidden textboxes
+            for _ in range(len(new_inputs), 10):
+                new_inputs.append(gr.Textbox(visible=False))
 
-            return (
-                gr.Column.update(visible=len(parameters) > 0),
-                *new_inputs,
-                gr.Button.update(visible=True),
-                gr.Row.update(visible=False)
-            )
+            return new_inputs + [gr.Button.update(visible=True)]
 
         script_dropdown.change(
             on_script_change,
             inputs=[script_dropdown],
-            outputs=[parameter_column, *[gr.Textbox() for _ in range(10)], execute_button, output_row]
+            outputs=[*parameter_outputs, execute_button]
         )
 
         execute_button.click(
             execute_script,
-            inputs=[script_dropdown, *parameter_inputs],
+            inputs=[script_dropdown, *parameter_outputs],
             outputs=[stdout_output, stderr_output]
         )
 
