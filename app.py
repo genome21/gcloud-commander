@@ -35,19 +35,31 @@ def get_script_parameters(script_name):
 
     return parameters
 
+import tempfile
+
 def execute_script(script_name, *args):
     parameters = get_script_parameters(script_name)
 
+    with open(os.path.join("scripts", script_name), "r") as f:
+        original_content = f.read()
+
+    updated_content = original_content
+    for i, param in enumerate(parameters):
+        updated_content = updated_content.replace(f'set {param["name"]}={param["value"]}', f'set {param["name"]}={args[i]}')
+        updated_content = updated_content.replace(f'--{param["name"]}={param["value"]}', f'--{param["name"]}={args[i]}')
+        updated_content = updated_content.replace(f'${param["name"]}', str(args[i]))
+
+
+    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".bat" if script_name.endswith(".bat") else ".sh") as temp_file:
+        temp_file.write(updated_content)
+        temp_script_path = temp_file.name
+
     if script_name.endswith(".bat"):
-        command = [os.path.join("scripts", script_name)]
-        for i, param in enumerate(parameters):
-            command.append(str(args[i]))
+        command = [temp_script_path]
         env = None
     else:
-        command = ["bash", os.path.join("scripts", script_name)]
+        command = ["bash", temp_script_path]
         env = os.environ.copy()
-        for i, param in enumerate(parameters):
-            env[param["name"]] = args[i]
 
     process = subprocess.Popen(
         command,
@@ -56,6 +68,9 @@ def execute_script(script_name, *args):
         env=env,
     )
     stdout, stderr = process.communicate()
+
+    os.remove(temp_script_path)
+
     return stdout.decode("utf-8"), stderr.decode("utf-8")
 
 def create_interface():
