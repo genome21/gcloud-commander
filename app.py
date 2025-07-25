@@ -103,7 +103,7 @@ def create_interface():
 
         def on_script_change(script_name):
             if not script_name:
-                return [gr.update(visible=False) for _ in range(10)] + [gr.update(visible=False)]
+                return [gr.update(visible=False) for _ in range(10)] + [gr.update(visible=False), gr.update(value=""), gr.update(value="")]
 
             parameters = get_script_parameters(script_name)
 
@@ -115,12 +115,12 @@ def create_interface():
             for _ in range(len(new_inputs), 10):
                 new_inputs.append(gr.Textbox(visible=False))
 
-            return new_inputs + [gr.update(visible=True)]
+            return new_inputs + [gr.update(visible=True), gr.update(value=""), gr.update(value="")]
 
         script_dropdown.change(
             on_script_change,
             inputs=[script_dropdown],
-            outputs=[*parameter_outputs, execute_button]
+            outputs=[*parameter_outputs, execute_button, stdout_output, stderr_output]
         )
 
         iface.load(lambda: gr.update(choices=get_scripts("Linux/Bash")), None, script_dropdown)
