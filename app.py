@@ -77,7 +77,7 @@ def create_interface():
 
         def on_script_change(script_name):
             if not script_name:
-                return [gr.update(visible=False) for _ in range(10)] + [gr.Button.update(visible=False)]
+                return [gr.update(visible=False) for _ in range(10)] + [gr.update(visible=False)]
 
             parameters = get_script_parameters(script_name)
 
@@ -89,7 +89,7 @@ def create_interface():
             for _ in range(len(new_inputs), 10):
                 new_inputs.append(gr.Textbox(visible=False))
 
-            return new_inputs + [gr.Button.update(visible=True)]
+            return new_inputs + [gr.update(visible=True)]
 
         script_dropdown.change(
             on_script_change,
