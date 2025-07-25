@@ -75,7 +75,7 @@ def execute_script(script_name, *args):
     return stdout.decode("utf-8"), stderr.decode("utf-8")
 
 def create_interface():
-    with gr.Blocks() as iface:
+    with gr.Blocks(analytics_enabled=False) as iface:
         gr.Markdown("# GCloud Commander")
 
         os_switch = gr.Radio(["Linux/Bash", "Windows/Batch"], label="Operating System", value="Linux/Bash")
