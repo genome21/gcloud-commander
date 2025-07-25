@@ -93,7 +93,7 @@ def create_interface():
 
         def on_os_change(os_type):
             scripts = get_scripts(os_type)
-            return gr.Dropdown.update(choices=scripts)
+            return gr.update(choices=scripts)
 
         os_switch.change(
             on_os_change,
@@ -123,7 +123,7 @@ def create_interface():
             outputs=[*parameter_outputs, execute_button]
         )
 
-        iface.load(lambda: gr.Dropdown.update(choices=get_scripts("Linux/Bash")), None, script_dropdown)
+        iface.load(lambda: gr.update(choices=get_scripts("Linux/Bash")), None, script_dropdown)
 
         execute_button.click(
             execute_script,
