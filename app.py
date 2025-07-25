@@ -16,29 +16,38 @@ def get_script_parameters(script_name):
     with open(os.path.join("scripts", script_name), "r") as f:
         content = f.read()
 
-        # Parse parameters from read -p commands
-        read_p_params = re.findall(r'read -p "([^"]+)" ([A-Z_0-9]+)', content)
-        for param in read_p_params:
-            parameters.append({"label": param[0], "name": param[1], "value": ""})
-
-        # Parse parameters from gcloud commands
-        gcloud_params = re.findall(r'--([a-zA-Z0-9_-]+)=?([^\s]+)', content)
-        for param in gcloud_params:
-            if not any(p["name"] == param[0] for p in parameters):
+        if script_name.endswith(".bat"):
+            # Parse parameters from set commands
+            set_params = re.findall(r'set ([a-zA-Z0-9_]+)=([^\r\n]+)', content)
+            for param in set_params:
                 parameters.append({"label": param[0], "name": param[0], "value": param[1]})
+        else:
+            # Parse parameters from read -p commands
+            read_p_params = re.findall(r'read -p "([^"]+)" ([A-Z_0-9]+)', content)
+            for param in read_p_params:
+                parameters.append({"label": param[0], "name": param[1], "value": ""})
+
+            # Parse parameters from gcloud commands
+            gcloud_params = re.findall(r'--([a-zA-Z0-9_-]+)=?([^\s]+)', content)
+            for param in gcloud_params:
+                if not any(p["name"] == param[0] for p in parameters):
+                    parameters.append({"label": param[0], "name": param[0], "value": param[1]})
 
     return parameters
 
 def execute_script(script_name, *args):
     parameters = get_script_parameters(script_name)
-    env = os.environ.copy()
-    for i, param in enumerate(parameters):
-        env[param["name"]] = args[i]
 
     if script_name.endswith(".bat"):
         command = [os.path.join("scripts", script_name)]
+        for i, param in enumerate(parameters):
+            command.append(str(args[i]))
+        env = None
     else:
         command = ["bash", os.path.join("scripts", script_name)]
+        env = os.environ.copy()
+        for i, param in enumerate(parameters):
+            env[param["name"]] = args[i]
 
     process = subprocess.Popen(
         command,
