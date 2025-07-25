@@ -68,6 +68,22 @@ npm run dev
 
 This will start the application on `http://localhost:9002` by default.
 
+### Gradio Application
+
+To run the Gradio application, you first need to build the Docker image:
+
+```bash
+docker build -t gradio-app -f gradio.Dockerfile .
+```
+
+Then, you can run the Docker container:
+
+```bash
+docker run -p 7860:7860 gradio-app
+```
+
+The Gradio application will be available at `http://localhost:7860`.
+
 ---
 
 ## ✍️ Authoring Scripts
