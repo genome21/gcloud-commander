@@ -5,7 +5,7 @@ import subprocess
 def get_scripts():
     scripts = []
     for filename in os.listdir("scripts"):
-        if filename.endswith(".sh"):
+        if filename.endswith(".sh") or filename.endswith(".bat"):
             scripts.append(filename)
     return scripts
 
@@ -35,8 +35,13 @@ def execute_script(script_name, *args):
     for i, param in enumerate(parameters):
         env[param["name"]] = args[i]
 
+    if script_name.endswith(".bat"):
+        command = [os.path.join("scripts", script_name)]
+    else:
+        command = ["bash", os.path.join("scripts", script_name)]
+
     process = subprocess.Popen(
-        ["bash", os.path.join("scripts", script_name)],
+        command,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         env=env,
