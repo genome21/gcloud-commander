@@ -70,6 +70,8 @@ This will start the application on `http://localhost:9002` by default.
 
 ### Gradio Application
 
+The Gradio application provides a simplified interface for executing the scripts in the `scripts` directory.
+
 To run the Gradio application, you first need to build the Docker image:
 
 ```bash
