@@ -19,7 +19,7 @@ export interface ScriptMetadata {
 }
 
 // --- Project Info Fetching ---
-const GCLOUD_RUNNER_URL = 'https://gcloud-runner-532743504408.us-central1.run.app/';
+const GCLOUD_RUNNER_URL = process.env.NEXT_PUBLIC_GCLOUD_RUNNER_URL || 'https://gcloud-runner-532743504408.us-central1.run.app/';
 
 async function runGcloudCommand(command: string): Promise<any> {
     const response = await fetch(GCLOUD_RUNNER_URL, {

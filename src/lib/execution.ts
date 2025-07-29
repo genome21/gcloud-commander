@@ -1,5 +1,5 @@
 
-const GCLOUD_RUNNER_URL = 'https://gcloud-runner-532743504408.us-central1.run.app/';
+const GCLOUD_RUNNER_URL = process.env.NEXT_PUBLIC_GCLOUD_RUNNER_URL || 'https://gcloud-runner-532743504408.us-central1.run.app/';
 
 export async function runExecutor(
     scriptContent: string,
