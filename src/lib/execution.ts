@@ -7,10 +7,6 @@ export async function runExecutor(
     detectedFlags: Record<string, string>,
     controller: ReadableStreamDefaultController<any>
 ) {
-    console.log('--- GCloud Commander: Orchestrating Script Execution ---');
-    console.log('Input Variables:', inputValues);
-    console.log('Detected Flags:', detectedFlags);
-
     const sendData = (data: object) => {
         try {
             controller.enqueue(new TextEncoder().encode(JSON.stringify(data) + '\n'));
@@ -18,6 +14,10 @@ export async function runExecutor(
             console.warn("GCloud Commander: Could not write to stream, controller likely closed.");
         }
     };
+
+    const sendLogChunk = (chunk: string) => {
+        sendData({ type: 'log', data: { chunk } });
+    }
     
     let isClosed = false;
     const closeController = () => {
@@ -84,6 +84,7 @@ export async function runExecutor(
                 // Handle step delimiter
                 completeAndSendStep();
                 currentStepTitle = stepMatch[1] || 'Untitled Step';
+                sendLogChunk(`\n--- STEP: ${currentStepTitle} ---\n`);
             } else if (rawCommand.trim().startsWith('gcloud')) {
                 // Delegate to gcloud-runner, substituting variables first.
                 let hydratedCommand = rawCommand;
@@ -102,6 +103,7 @@ export async function runExecutor(
                     }
                 }
                 
+                sendLogChunk(`$ ${hydratedCommand}\n`);
                 const runnerResponse = await fetch(GCLOUD_RUNNER_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -111,10 +113,14 @@ export async function runExecutor(
                 const result = await runnerResponse.json();
 
                 if (result.stdout) {
-                    currentStepLog += result.stdout + '\n';
+                    const output = result.stdout + '\n';
+                    currentStepLog += output;
+                    sendLogChunk(output);
                 }
                 if (result.stderr) {
-                    currentStepLog += `[STDERR] ${result.stderr}\n`;
+                    const errorOutput = `[STDERR] ${result.stderr}\n`;
+                    currentStepLog += errorOutput;
+                    sendLogChunk(errorOutput);
                 }
 
                 if (!runnerResponse.ok || result.returncode !== 0) {
@@ -124,18 +130,31 @@ export async function runExecutor(
             } else if (sleepMatch) {
                 // Handle sleep locally
                 const duration = parseInt(sleepMatch[1], 10);
-                currentStepLog += `Sleeping for ${duration} seconds...\n`;
+                const sleepStartedMsg = `Sleeping for ${duration} seconds...\n`;
+                const sleepEndedMsg = `Sleep complete.\n`;
+                
+                sendLogChunk(`$ ${rawCommand}\n`);
+                currentStepLog += sleepStartedMsg;
+                sendLogChunk(sleepStartedMsg);
+
                 await new Promise(resolve => setTimeout(resolve, duration * 1000));
-                currentStepLog += `Sleep complete.\n`;
+                
+                currentStepLog += sleepEndedMsg;
+                sendLogChunk(sleepEndedMsg);
+
             } else if (echoMatch) {
+                 sendLogChunk(`$ ${rawCommand}\n`);
                  let output = echoMatch[1];
                  // Naive quote removal
                  if ((output.startsWith('"') && output.endsWith('"')) || (output.startsWith("'") && output.endsWith("'"))) {
                     output = output.substring(1, output.length - 1);
                  }
-                 currentStepLog += `${output}\n`;
+                 const echoOutput = `${output}\n`;
+                 currentStepLog += echoOutput;
+                 sendLogChunk(echoOutput);
             } else {
-                // For other non-executable commands, we do nothing to keep the log clean.
+                // For other non-executable commands, just log them to the full log.
+                sendLogChunk(`$ ${rawCommand}\n`);
             }
         }
         
@@ -145,7 +164,9 @@ export async function runExecutor(
     } catch (error) {
         console.error('--- GCloud Commander: Error during script orchestration ---', error);
         const message = error instanceof Error ? error.message : 'An unknown error occurred';
-        currentStepLog += `\n--- EXECUTION FAILED ---\n${message}\n`;
+        const errorMsg = `\n--- EXECUTION FAILED ---\n${message}\n`;
+        currentStepLog += errorMsg;
+        sendLogChunk(errorMsg);
         completeAndSendStep();
         sendData({ type: 'error', data: { message: `Execution failed at step: "${currentStepTitle}"` } });
     } finally {

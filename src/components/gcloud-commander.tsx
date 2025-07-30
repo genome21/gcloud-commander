@@ -18,6 +18,7 @@ import {
   Info,
   Cpu,
   FileSearch,
+  BookText,
 } from 'lucide-react';
 import { getSummaryForScriptLog, getScripts, saveScript, deleteScript, getProjectInfo, getMachineTypes, type Script, type ProjectInfo, type MachineTypeInfo } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -124,6 +125,8 @@ export default function GCloudCommander() {
   const [isManaging, setIsManaging] = useState(false);
   const [expandedLogs, setExpandedLogs] = useState<Set<number>>(new Set());
   const [isAiSummaryEnabled, setIsAiSummaryEnabled] = useState(true);
+  const [fullLog, setFullLog] = useState<string>('');
+  const [isFullLogDialogOpen, setIsFullLogDialogOpen] = useState(false);
 
   // State for Project Info Dialog
   const [projectInfo, setProjectInfo] = useState<ProjectInfo | null>(null);
@@ -208,10 +211,12 @@ export default function GCloudCommander() {
 
         setSteps([]);
         setExpandedLogs(new Set());
+        setFullLog('');
       } else {
         setParameters([]);
         setSteps([]);
         setExpandedLogs(new Set());
+        setFullLog('');
       }
   }, [selectedScript]);
 
@@ -311,6 +316,7 @@ export default function GCloudCommander() {
     setIsExecuting(true);
     setSteps([]);
     setExpandedLogs(new Set());
+    setFullLog('');
 
     const variables: Record<string, string> = {};
     const detectedFlags: Record<string, string> = {};
@@ -395,6 +401,8 @@ export default function GCloudCommander() {
                 );
             }
 
+          } else if (type === 'log') {
+            setFullLog((prev) => prev + data.chunk);
           } else if (type === 'error') {
             toast({
               variant: 'destructive',
@@ -602,6 +610,14 @@ export default function GCloudCommander() {
             </Tooltip>
           </TooltipProvider>
         </div>
+        {fullLog && !isExecuting && (
+            <div className="flex w-full justify-end">
+                <Button variant="outline" onClick={() => setIsFullLogDialogOpen(true)}>
+                    <BookText className="mr-2 h-4 w-4" />
+                    View Full Log
+                </Button>
+            </div>
+        )}
         {steps.length > 0 && (
           <div className="w-full space-y-4">
              <Separator />
@@ -649,7 +665,7 @@ export default function GCloudCommander() {
                           </Button>
                         </div>
                       </>
-                    ) : !step.summaryLoading ? (
+                    ) : !isAiSummaryEnabled && step.status !== 'running' ? (
                         <div className="flex justify-start pt-2">
                           <Button
                               variant="outline"
@@ -708,6 +724,11 @@ export default function GCloudCommander() {
       open={isPreviewDialogOpen}
       onOpenChange={setIsPreviewDialogOpen}
       scriptContent={previewScriptContent}
+    />
+    <FullLogDialog
+        open={isFullLogDialogOpen}
+        onOpenChange={setIsFullLogDialogOpen}
+        logContent={fullLog}
     />
     </>
   );
@@ -1159,4 +1180,37 @@ function ScriptPreviewDialog({
   );
 }
 
-    
+function FullLogDialog({
+  open,
+  onOpenChange,
+  logContent,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  logContent: string;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Full Execution Log</DialogTitle>
+          <DialogDescription>
+            A complete, verbose log of the entire script execution run.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex-grow my-4 overflow-hidden">
+            <ScrollArea className="absolute inset-0">
+                <pre className="text-xs p-4 bg-muted rounded-md whitespace-pre-wrap font-mono text-muted-foreground">
+                    <code>{logContent}</code>
+                </pre>
+            </ScrollArea>
+        </div>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline">Close</Button>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
