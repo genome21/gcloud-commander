@@ -389,7 +389,7 @@ export default function GCloudCommander() {
                  setSteps((prevSteps) =>
                     prevSteps.map((s) =>
                         s.id === step.id
-                        ? { ...s, status: 'success', summary: 'AI summary is disabled.', summaryLoading: false }
+                        ? { ...s, status: 'success', summary: undefined, summaryLoading: false }
                         : s
                     )
                 );
@@ -617,70 +617,70 @@ export default function GCloudCommander() {
                   <StatusIcon status={step.status} />
                   <div className="flex-1 space-y-1">
                     <p className="font-medium font-headline">{step.title}</p>
+                    
                     {isAiSummaryEnabled && step.summaryLoading ? (
                       <div className="space-y-2 pt-1">
                           <Skeleton className="h-4 w-1/4" />
                           <Skeleton className="h-4 w-3/4" />
                       </div>
-                    ) : (
-                      step.summary && (
-                        <>
-                            <motion.div 
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                className="mt-2 rounded-md border border-primary/20 bg-primary/5 p-3 text-sm">
-                              <div className="flex items-center gap-2 font-medium text-primary">
-                                <Sparkles className="h-4 w-4" />
-                                <span>AI Summary</span>
-                              </div>
-                              <p className="mt-1 text-foreground/80">
-                                {step.summary}
-                              </p>
-                            </motion.div>
-
-                            <div className="flex justify-start pt-2">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => toggleLogExpansion(step.id)}
-                                    className="text-muted-foreground"
-                                >
-                                    <FileText className="mr-2 h-3 w-3" />
-                                    {expandedLogs.has(step.id) ? 'Hide Raw Output' : 'View Raw Output'}
-                                </Button>
-                            </div>
-
-                            <AnimatePresence>
-                                {expandedLogs.has(step.id) && (
-                                <motion.div
-                                    initial={{ height: 0, opacity: 0 }}
-                                    animate={{ height: 'auto', opacity: 1 }}
-                                    exit={{ height: 0, opacity: 0 }}
-                                    transition={{ duration: 0.2 }}
-                                    className="overflow-hidden"
-                                >
-                                    <pre className="text-xs mt-2 p-4 bg-muted rounded-md whitespace-pre-wrap font-mono text-muted-foreground">
-                                    <code>{step.log}</code>
-                                    </pre>
-                                </motion.div>
-                                )}
-                            </AnimatePresence>
-                        </>
-                      )
-                    )}
-                     {!isAiSummaryEnabled && !step.summaryLoading && (
+                    ) : isAiSummaryEnabled && step.summary ? (
+                      <>
+                        <motion.div 
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="mt-2 rounded-md border border-primary/20 bg-primary/5 p-3 text-sm">
+                          <div className="flex items-center gap-2 font-medium text-primary">
+                            <Sparkles className="h-4 w-4" />
+                            <span>AI Summary</span>
+                          </div>
+                          <p className="mt-1 text-foreground/80">
+                            {step.summary}
+                          </p>
+                        </motion.div>
                         <div className="flex justify-start pt-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => toggleLogExpansion(step.id)}
-                                className="text-muted-foreground"
-                            >
-                                <FileText className="mr-2 h-3 w-3" />
-                                {expandedLogs.has(step.id) ? 'Hide Raw Output' : 'View Raw Output'}
-                            </Button>
+                          <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => toggleLogExpansion(step.id)}
+                              className="text-muted-foreground"
+                          >
+                              <FileText className="mr-2 h-3 w-3" />
+                              {expandedLogs.has(step.id) ? 'Hide Raw Output' : 'View Raw Output'}
+                          </Button>
                         </div>
-                     )}
+                      </>
+                    ) : !step.summaryLoading ? (
+                        <div className="flex justify-start pt-2">
+                          <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => toggleLogExpansion(step.id)}
+                              className="text-muted-foreground"
+                          >
+                              <FileText className="mr-2 h-3 w-3" />
+                              {expandedLogs.has(step.id) ? 'Hide Raw Output' : 'View Raw Output'}
+                          </Button>
+                        </div>
+                    ) : null}
+
+                    {step.status !== 'running' && (
+                        <AnimatePresence>
+                          {expandedLogs.has(step.id) && (
+                          <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.2 }}
+                              className="overflow-hidden"
+                          >
+                              <pre className="text-xs mt-2 p-4 bg-muted rounded-md whitespace-pre-wrap font-mono text-muted-foreground">
+                              <code>{step.log}</code>
+                              </pre>
+                          </motion.div>
+                          )}
+                        </AnimatePresence>
+                    )}
+
                   </div>
                 </motion.div>
               ))}
@@ -1158,3 +1158,5 @@ function ScriptPreviewDialog({
     </Dialog>
   );
 }
+
+    
