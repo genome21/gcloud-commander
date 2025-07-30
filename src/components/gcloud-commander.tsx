@@ -19,6 +19,8 @@ import {
   Cpu,
   FileSearch,
   BookText,
+  ClipboardCopy,
+  Search,
 } from 'lucide-react';
 import { getSummaryForScriptLog, getScripts, saveScript, deleteScript, getProjectInfo, getMachineTypes, type Script, type ProjectInfo, type MachineTypeInfo } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
@@ -1189,6 +1191,26 @@ function FullLogDialog({
   onOpenChange: (open: boolean) => void;
   logContent: string;
 }) {
+  const { toast } = useToast();
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(logContent);
+    toast({ title: 'Success', description: 'Full log copied to clipboard.' });
+  };
+  
+  const highlightedLog = useMemo(() => {
+    if (!searchQuery) {
+      return logContent;
+    }
+    // Escape special characters for regex
+    const escapedQuery = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(${escapedQuery})`, 'gi');
+    return logContent.split(regex).map((part, index) => 
+      regex.test(part) ? <mark key={index} className="bg-primary/30 text-foreground">{part}</mark> : <span key={index}>{part}</span>
+    );
+  }, [logContent, searchQuery]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
@@ -1199,16 +1221,32 @@ function FullLogDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="flex-grow my-4 overflow-hidden">
-            <ScrollArea className="h-full w-full">
-                <pre className="text-xs p-4 bg-muted rounded-md whitespace-pre-wrap font-mono text-muted-foreground">
-                    <code>{logContent}</code>
-                </pre>
-            </ScrollArea>
+          <ScrollArea className="h-full w-full rounded-md border">
+            <pre className="text-xs p-4 whitespace-pre-wrap font-mono text-muted-foreground">
+              <code>{highlightedLog}</code>
+            </pre>
+          </ScrollArea>
         </div>
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button variant="outline">Close</Button>
-          </DialogClose>
+        <DialogFooter className="gap-2 sm:justify-between">
+            <div className="relative w-full max-w-sm">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input 
+                    type="search"
+                    placeholder="Search logs..."
+                    className="pl-9"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                />
+            </div>
+            <div className="flex gap-2">
+                <Button variant="outline" onClick={handleCopy}>
+                    <ClipboardCopy className="mr-2 h-4 w-4" />
+                    Copy
+                </Button>
+                <DialogClose asChild>
+                    <Button variant="outline">Close</Button>
+                </DialogClose>
+            </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
