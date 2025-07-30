@@ -133,11 +133,12 @@ export async function runExecutor(
             } else {
                 // Handle other commands (like simple echos) by just logging them
                 currentStepLog += `$ ${rawCommand}\n`;
-                // Non-executable commands are logged for transparency but produce no further output.
-                // A simple `echo` will be handled here. We'll simulate its output.
+                // A simple `echo` will be handled here by the gcloud-runner mock, but in a real scenario
+                // you might want to simulate it or have a more robust shell command executor.
+                // For this app, we assume non-gcloud, non-sleep commands are for logging/display only.
                 if (rawCommand.trim().startsWith('echo')) {
-                    let output = rawCommand.trim().substring(5); // 5 is 'echo '.length
-                     // Naive quote removal
+                    let output = rawCommand.trim().substring(5);
+                    // Naive quote removal
                     if ((output.startsWith('"') && output.endsWith('"')) || (output.startsWith("'") && output.endsWith("'"))) {
                         output = output.substring(1, output.length - 1);
                     }
