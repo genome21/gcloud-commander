@@ -37,6 +37,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { ScriptFlowDiagram } from './script-flow-diagram';
+import { Switch } from '@/components/ui/switch';
 
 interface ScriptParameter {
   name: string; // e.g., GCLOUD_PROJECT or zone
@@ -122,6 +123,7 @@ export default function GCloudCommander() {
   const [isExecuting, setIsExecuting] = useState(false);
   const [isManaging, setIsManaging] = useState(false);
   const [expandedLogs, setExpandedLogs] = useState<Set<number>>(new Set());
+  const [isAiSummaryEnabled, setIsAiSummaryEnabled] = useState(true);
 
   // State for Project Info Dialog
   const [projectInfo, setProjectInfo] = useState<ProjectInfo | null>(null);
@@ -360,28 +362,39 @@ export default function GCloudCommander() {
             const step = data;
             setSteps((prevSteps) => [
               ...prevSteps,
-              { ...step, status: 'running', summaryLoading: true },
+              { ...step, status: 'running', summaryLoading: isAiSummaryEnabled },
             ]);
-  
-            getSummaryForScriptLog(step.log)
-              .then(summary => {
-                setSteps((prevSteps) =>
-                  prevSteps.map((s) =>
-                    s.id === step.id
-                      ? { ...s, status: 'success', summary, summaryLoading: false }
-                      : s
-                  )
+            
+            if (isAiSummaryEnabled) {
+                getSummaryForScriptLog(step.log)
+                .then(summary => {
+                    setSteps((prevSteps) =>
+                    prevSteps.map((s) =>
+                        s.id === step.id
+                        ? { ...s, status: 'success', summary, summaryLoading: false }
+                        : s
+                    )
+                    );
+                })
+                .catch(() => {
+                    setSteps((prevSteps) =>
+                    prevSteps.map((s) =>
+                        s.id === step.id
+                        ? { ...s, status: 'error', summary: 'Failed to get summary.', summaryLoading: false }
+                        : s
+                    )
+                    );
+                });
+            } else {
+                 setSteps((prevSteps) =>
+                    prevSteps.map((s) =>
+                        s.id === step.id
+                        ? { ...s, status: 'success', summary: 'AI summary is disabled.', summaryLoading: false }
+                        : s
+                    )
                 );
-              })
-              .catch(() => {
-                setSteps((prevSteps) =>
-                  prevSteps.map((s) =>
-                    s.id === step.id
-                      ? { ...s, status: 'error', summary: 'Failed to get summary.', summaryLoading: false }
-                      : s
-                  )
-                );
-              });
+            }
+
           } else if (type === 'error') {
             toast({
               variant: 'destructive',
@@ -473,9 +486,17 @@ export default function GCloudCommander() {
                     </CardDescription>
                 </div>
             </div>
-            <Button variant="ghost" size="icon" onClick={() => setIsManaging(true)}>
-                <Settings className="h-5 w-5" />
-            </Button>
+             <div className="flex items-center gap-4">
+                <div className="flex items-center space-x-2">
+                    <Switch id="ai-summary-switch" checked={isAiSummaryEnabled} onCheckedChange={setIsAiSummaryEnabled} disabled={isExecuting} />
+                    <Label htmlFor="ai-summary-switch" className="flex flex-col">
+                        <span className="text-sm font-medium">AI Summaries</span>
+                    </Label>
+                </div>
+                <Button variant="ghost" size="icon" onClick={() => setIsManaging(true)}>
+                    <Settings className="h-5 w-5" />
+                </Button>
+            </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -596,7 +617,7 @@ export default function GCloudCommander() {
                   <StatusIcon status={step.status} />
                   <div className="flex-1 space-y-1">
                     <p className="font-medium font-headline">{step.title}</p>
-                    {step.summaryLoading ? (
+                    {isAiSummaryEnabled && step.summaryLoading ? (
                       <div className="space-y-2 pt-1">
                           <Skeleton className="h-4 w-1/4" />
                           <Skeleton className="h-4 w-3/4" />
@@ -647,6 +668,19 @@ export default function GCloudCommander() {
                         </>
                       )
                     )}
+                     {!isAiSummaryEnabled && !step.summaryLoading && (
+                        <div className="flex justify-start pt-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => toggleLogExpansion(step.id)}
+                                className="text-muted-foreground"
+                            >
+                                <FileText className="mr-2 h-3 w-3" />
+                                {expandedLogs.has(step.id) ? 'Hide Raw Output' : 'View Raw Output'}
+                            </Button>
+                        </div>
+                     )}
                   </div>
                 </motion.div>
               ))}
