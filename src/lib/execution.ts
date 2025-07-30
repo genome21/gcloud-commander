@@ -78,12 +78,12 @@ export async function runExecutor(
         for (const rawCommand of commands) {
             const stepMatch = rawCommand.match(/echo "---STEP:([^"]+)"/);
             const sleepMatch = rawCommand.match(/^sleep (\d+)/);
+            const echoMatch = rawCommand.match(/^echo (.*)/);
 
             if (stepMatch) {
                 // Handle step delimiter
                 completeAndSendStep();
                 currentStepTitle = stepMatch[1] || 'Untitled Step';
-                currentStepLog += `$ ${rawCommand}\n--- STEP: ${currentStepTitle} ---\n`;
             } else if (rawCommand.trim().startsWith('gcloud')) {
                 // Delegate to gcloud-runner, substituting variables first.
                 let hydratedCommand = rawCommand;
@@ -102,8 +102,6 @@ export async function runExecutor(
                     }
                 }
                 
-                currentStepLog += `$ ${hydratedCommand}\n`; 
-
                 const runnerResponse = await fetch(GCLOUD_RUNNER_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -126,24 +124,18 @@ export async function runExecutor(
             } else if (sleepMatch) {
                 // Handle sleep locally
                 const duration = parseInt(sleepMatch[1], 10);
-                currentStepLog += `$ ${rawCommand}\n`;
                 currentStepLog += `Sleeping for ${duration} seconds...\n`;
                 await new Promise(resolve => setTimeout(resolve, duration * 1000));
                 currentStepLog += `Sleep complete.\n`;
+            } else if (echoMatch) {
+                 let output = echoMatch[1];
+                 // Naive quote removal
+                 if ((output.startsWith('"') && output.endsWith('"')) || (output.startsWith("'") && output.endsWith("'"))) {
+                    output = output.substring(1, output.length - 1);
+                 }
+                 currentStepLog += `${output}\n`;
             } else {
-                // Handle other commands (like simple echos) by just logging them
-                currentStepLog += `$ ${rawCommand}\n`;
-                // A simple `echo` will be handled here by the gcloud-runner mock, but in a real scenario
-                // you might want to simulate it or have a more robust shell command executor.
-                // For this app, we assume non-gcloud, non-sleep commands are for logging/display only.
-                if (rawCommand.trim().startsWith('echo')) {
-                    let output = rawCommand.trim().substring(5);
-                    // Naive quote removal
-                    if ((output.startsWith('"') && output.endsWith('"')) || (output.startsWith("'") && output.endsWith("'"))) {
-                        output = output.substring(1, output.length - 1);
-                    }
-                    currentStepLog += `${output}\n`;
-                }
+                // For other non-executable commands, we do nothing to keep the log clean.
             }
         }
         
