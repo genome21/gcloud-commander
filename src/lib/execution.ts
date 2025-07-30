@@ -78,8 +78,6 @@ export async function runExecutor(
         for (const rawCommand of commands) {
             const stepMatch = rawCommand.match(/echo "---STEP:([^"]+)"/);
             const sleepMatch = rawCommand.match(/^sleep (\d+)/);
-            const echoMatch = rawCommand.match(/^echo ("[^"]*"|'[^']*'|[^ ]*)/);
-
 
             if (stepMatch) {
                 // Handle step delimiter
@@ -132,20 +130,19 @@ export async function runExecutor(
                 currentStepLog += `Sleeping for ${duration} seconds...\n`;
                 await new Promise(resolve => setTimeout(resolve, duration * 1000));
                 currentStepLog += `Sleep complete.\n`;
-            } else if (echoMatch) {
-                 // Handle other simple echo commands
-                currentStepLog += `$ ${rawCommand}\n`;
-                let output = echoMatch[1];
-                 // Remove quotes
-                if ((output.startsWith('"') && output.endsWith('"')) || (output.startsWith("'") && output.endsWith("'"))) {
-                    output = output.substring(1, output.length - 1);
-                }
-                currentStepLog += `${output}\n`;
-            }
-             else {
-                // Handle other commands by just logging them
+            } else {
+                // Handle other commands (like simple echos) by just logging them
                 currentStepLog += `$ ${rawCommand}\n`;
                 // Non-executable commands are logged for transparency but produce no further output.
+                // A simple `echo` will be handled here. We'll simulate its output.
+                if (rawCommand.trim().startsWith('echo')) {
+                    let output = rawCommand.trim().substring(5); // 5 is 'echo '.length
+                     // Naive quote removal
+                    if ((output.startsWith('"') && output.endsWith('"')) || (output.startsWith("'") && output.endsWith("'"))) {
+                        output = output.substring(1, output.length - 1);
+                    }
+                    currentStepLog += `${output}\n`;
+                }
             }
         }
         
