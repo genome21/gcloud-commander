@@ -1199,7 +1199,7 @@ function FullLogDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="flex-grow my-4 overflow-hidden">
-            <ScrollArea className="absolute inset-0">
+            <ScrollArea className="h-full w-full">
                 <pre className="text-xs p-4 bg-muted rounded-md whitespace-pre-wrap font-mono text-muted-foreground">
                     <code>{logContent}</code>
                 </pre>
